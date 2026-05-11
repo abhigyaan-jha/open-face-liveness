@@ -1,9 +1,9 @@
 import type {
   FaceAnchorDrift,
   FaceAnchorPosition,
-  FaceFitOptions,
   Rect,
-} from '../types.js';
+} from '../result.js';
+import type { FaceFitOptions } from '../config.js';
 
 export const getAnchorPosition = (
   comparisonBox: Rect | null,
@@ -51,4 +51,3 @@ export const isAnchorStable = (drift: FaceAnchorDrift | null, face: FaceFitOptio
     Math.abs(drift.distanceIncreaseRatio) <= face.stabilityDistanceIncreaseThreshold
   );
 };
-

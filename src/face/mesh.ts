@@ -2,12 +2,12 @@ import type {
   FaceDetectionResult,
   FaceMeshResult,
   LandmarkBounds,
-  MeshAdapter,
-  MeshPipeline,
   Point3D,
   Rect,
   ZRange,
-} from '../types.js';
+} from '../result.js';
+import type { MeshAdapter, MeshPipeline } from '../models.js';
+import { VerificationError } from '../errors.js';
 
 const MESH_INPUT_SIZE = 192;
 const MESH_THRESHOLD = 0.5;
@@ -128,7 +128,9 @@ export const createMeshPipeline = (adapter: MeshAdapter): MeshPipeline => {
   });
 
   if (!context) {
-    throw new Error('Unable to create mesh canvas context.');
+    throw new VerificationError('face.canvas_unavailable', 'Unable to create mesh canvas context.', {
+      area: 'face',
+    });
   }
 
   const inputData = new Float32Array(MESH_INPUT_SIZE * MESH_INPUT_SIZE * 3);

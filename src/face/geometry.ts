@@ -1,4 +1,4 @@
-import type { FaceDetectionResult, Rect } from '../types.js';
+import type { FaceDetectionResult, Rect } from '../result.js';
 
 const FACE_GUIDE_WIDTH_RATIO = 0.35;
 export const FACE_GUIDE_ASPECT_RATIO = 360 / 448;

@@ -3,5 +3,4 @@ export {
   createOnnxDetectorAdapter,
   createOnnxMeshAdapter,
   createOnnxSpoofAdapter,
-} from '../providers/onnx.js';
-
+} from './adapters.js';

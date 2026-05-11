@@ -1,4 +1,5 @@
-import type { CameraStreamInfo, FaceFitOptions } from '../types.js';
+import type { FaceFitOptions } from '../config.js';
+import type { CameraStreamInfo } from '../events.js';
 
 interface ZoomRange {
   max: number;

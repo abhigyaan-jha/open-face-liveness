@@ -1,5 +1,6 @@
 import { VerificationError } from '../errors.js';
-import type { CameraStreamInfo, FaceFitOptions } from '../types.js';
+import type { FaceFitOptions } from '../config.js';
+import type { CameraStreamInfo } from '../events.js';
 import { applyDefaultCameraZoom, stopMediaStream, waitForVideoMetadata } from './media.js';
 
 export interface CameraHandle {

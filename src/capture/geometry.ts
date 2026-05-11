@@ -1,4 +1,4 @@
-import type { Rect } from '../types.js';
+import type { Rect } from '../result.js';
 
 export type FrameDisplayFit = 'contain' | 'cover' | 'fill';
 

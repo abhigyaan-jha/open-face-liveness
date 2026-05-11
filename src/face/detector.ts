@@ -1,4 +1,6 @@
-import type { DetectorAdapter, DetectorPipeline, FaceDetectionResult } from '../types.js';
+import type { DetectorAdapter, DetectorPipeline } from '../models.js';
+import type { FaceDetectionResult } from '../result.js';
+import { VerificationError } from '../errors.js';
 
 const DETECTOR_INPUT_SIZE = 128;
 const DETECTION_THRESHOLD = 0.5;
@@ -177,7 +179,9 @@ export const createDetectorPipeline = (adapter: DetectorAdapter): DetectorPipeli
   });
 
   if (!context) {
-    throw new Error('Unable to create detector canvas context.');
+    throw new VerificationError('face.canvas_unavailable', 'Unable to create detector canvas context.', {
+      area: 'face',
+    });
   }
 
   const inputData = new Float32Array(DETECTOR_INPUT_SIZE * DETECTOR_INPUT_SIZE * 3);

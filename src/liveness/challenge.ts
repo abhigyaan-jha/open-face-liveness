@@ -1,5 +1,10 @@
 import { getAnchorDrift } from '../face/stability.js';
 import type {
+  LivenessChallengeOptions,
+  ResolvedLivenessChallengeOptions,
+} from '../config.js';
+import { DEFAULT_LIVENESS_CHALLENGES, resolveLivenessSequence } from './sequence.js';
+import type {
   FaceAnchorPosition,
   FaceFitResult,
   FaceMeshResult,
@@ -7,15 +12,12 @@ import type {
   LivenessChallengeDirection,
   LivenessChallengeFrame,
   LivenessChallengeMetrics,
-  LivenessChallengeOptions,
-  LivenessChallengePlan,
   LivenessChallengeRecord,
   LivenessChallengeResult,
   LivenessChallengeState,
   LivenessChallengeTelemetry,
   LivenessChallengeType,
-  ResolvedLivenessChallengeOptions,
-} from '../types.js';
+} from '../result.js';
 
 const CHALLENGE_LANDMARKS = {
   chin: 152,
@@ -107,16 +109,6 @@ export const extractLivenessChallengeMetrics = (
   };
 };
 
-export const LIVENESS_CHALLENGE_TYPES = [
-  'head_pan_left',
-  'head_pan_right',
-  'head_pitch_up',
-  'head_pitch_down',
-  'mouth_open',
-] as const satisfies readonly LivenessChallengeType[];
-
-const DEFAULT_CHALLENGE_COUNT = 3;
-
 // Pose thresholds are applied to normalized landmark metrics.
 //
 // Admit/eject gate the "neutral" state (facing camera) relative to the stable
@@ -131,10 +123,9 @@ export const DEFAULT_LIVENESS_OPTIONS: ResolvedLivenessChallengeOptions = {
   activeMovementThreshold: 0.08,
   activeVerticalMovementThreshold: 0.18,
   celebrationDurationMs: 800,
-  challengeCount: DEFAULT_CHALLENGE_COUNT,
+  challenges: [...DEFAULT_LIVENESS_CHALLENGES],
   challengeMouthOpenRatio: 0.35,
   challengePitchLimit: 0.4,
-  challengeTypes: [...LIVENESS_CHALLENGE_TYPES],
   challengeYawLimit: 0.35,
   ejectionDebounceMs: 120,
   mouthDwellMs: 200,
@@ -153,14 +144,6 @@ export const DEFAULT_LIVENESS_OPTIONS: ResolvedLivenessChallengeOptions = {
   stabilityPoseThreshold: 0.06,
   stabilityThreshold: 0.05,
   stabilizationDurationMs: 700,
-};
-
-const CHALLENGE_LABELS: Record<LivenessChallengeType, string> = {
-  head_pan_left: 'left',
-  head_pan_right: 'right',
-  head_pitch_down: 'down',
-  head_pitch_up: 'up',
-  mouth_open: 'mouth',
 };
 
 const CHALLENGE_INSTRUCTIONS: Record<LivenessChallengeType, string> = {
@@ -184,59 +167,13 @@ const clamp = (value: number, min: number, max: number): number => Math.min(Math
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
-const getCryptoRandomFraction = (): number => {
-  const cryptoApi = globalThis.crypto;
-  if (cryptoApi?.getRandomValues) {
-    const values = new Uint32Array(1);
-    cryptoApi.getRandomValues(values);
-    return (values[0] ?? 0) / (0xffffffff + 1);
-  }
-
-  return Math.random();
-};
-
-export type LivenessRandomSource = () => number;
-
 export const resolveLivenessOptions = (
   options?: LivenessChallengeOptions,
 ): ResolvedLivenessChallengeOptions => ({
   ...DEFAULT_LIVENESS_OPTIONS,
   ...options,
-  challengeCount: Math.max(1, Math.round(options?.challengeCount ?? DEFAULT_CHALLENGE_COUNT)),
-  challengeTypes:
-    options?.challengeTypes?.length
-      ? [...options.challengeTypes]
-      : [...DEFAULT_LIVENESS_OPTIONS.challengeTypes],
+  challenges: resolveLivenessSequence(options?.challenges),
 });
-
-export const generateLivenessChallengeSequence = (
-  options: Pick<ResolvedLivenessChallengeOptions, 'challengeCount' | 'challengeTypes'>,
-  random: LivenessRandomSource = getCryptoRandomFraction,
-): LivenessChallengeType[] => {
-  const challengeTypes = options.challengeTypes.length
-    ? options.challengeTypes
-    : DEFAULT_LIVENESS_OPTIONS.challengeTypes;
-  const sequence: LivenessChallengeType[] = [];
-
-  for (let index = 0; index < options.challengeCount; index += 1) {
-    const randomIndex = Math.floor(clamp(random(), 0, 0.999999999) * challengeTypes.length);
-    sequence.push(challengeTypes[randomIndex] ?? challengeTypes[0]);
-  }
-
-  return sequence;
-};
-
-export const createLivenessChecksum = (
-  sequence: readonly LivenessChallengeType[],
-  random: LivenessRandomSource = getCryptoRandomFraction,
-): string => {
-  const prefix = sequence.map((type) => CHALLENGE_LABELS[type]).join('-');
-  const suffix = Math.floor(clamp(random(), 0, 0.999999999) * 0x1000000)
-    .toString(16)
-    .padStart(6, '0');
-
-  return `${prefix}-${suffix}`;
-};
 
 const getChallengeDwellMs = (
   type: LivenessChallengeType,
@@ -255,16 +192,12 @@ const getChallengeDwellMs = (
 };
 
 const getInitialState = (): LivenessChallengeState => ({
-  challengeId: '',
-  checksum: '',
   completedChallenges: [],
   currentChallenge: null,
   currentStep: 0,
   direction: 'none',
   instruction: '',
-  nonce: '',
   phase: 'idle',
-  policyVersion: '',
   progress: 0,
   sequence: [],
   totalSteps: 0,
@@ -335,80 +268,11 @@ export interface LivenessChallengeController {
   update(frame: LivenessChallengeFrame): { result: LivenessChallengeResult | null; state: LivenessChallengeState };
 }
 
-export type { LivenessChallengePlan } from '../types.js';
+export type CreateLivenessChallengeControllerOptions = LivenessChallengeOptions;
 
-export interface CreateLivenessChallengeControllerOptions {
-  challengePlan?: LivenessChallengePlan;
-  options?: LivenessChallengeOptions;
-  random?: LivenessRandomSource;
-}
-
-const validateChallengePlan = (challengePlan: LivenessChallengePlan): LivenessChallengePlan => {
-  const sequence = [...challengePlan.sequence];
-
-  if (!challengePlan.challengeId.trim()) {
-    throw new Error('Liveness challenge plan challengeId is required.');
-  }
-
-  if (!challengePlan.policyVersion.trim()) {
-    throw new Error('Liveness challenge plan policyVersion is required.');
-  }
-
-  if (!challengePlan.nonce.trim()) {
-    throw new Error('Liveness challenge plan nonce is required.');
-  }
-
-  if (sequence.length !== DEFAULT_CHALLENGE_COUNT) {
-    throw new Error(`Liveness challenge plan must include ${DEFAULT_CHALLENGE_COUNT} challenges.`);
-  }
-
-  if (!challengePlan.checksum.trim()) {
-    throw new Error('Liveness challenge plan checksum is required.');
-  }
-
-  return {
-    challengeId: challengePlan.challengeId,
-    checksum: challengePlan.checksum,
-    nonce: challengePlan.nonce,
-    policyVersion: challengePlan.policyVersion,
-    sequence,
-  };
-};
-
-const createGeneratedChallengePlan = (
-  options: Pick<ResolvedLivenessChallengeOptions, 'challengeCount' | 'challengeTypes'>,
-  random: LivenessRandomSource,
-): LivenessChallengePlan => {
-  const sequence = generateLivenessChallengeSequence(options, random);
-  const checksum = createLivenessChecksum(sequence, random);
-
-  return {
-    challengeId: `generated:${checksum}`,
-    checksum,
-    nonce: checksum,
-    policyVersion: 'generated',
-    sequence,
-  };
-};
-
-const resolveChallengePlan = ({
-  challengePlan,
-  options,
-  random,
-}: {
-  challengePlan: LivenessChallengePlan | undefined;
-  options: Pick<ResolvedLivenessChallengeOptions, 'challengeCount' | 'challengeTypes'>;
-  random: LivenessRandomSource;
-}): LivenessChallengePlan =>
-  challengePlan
-    ? validateChallengePlan(challengePlan)
-    : createGeneratedChallengePlan(options, random);
-
-export const createLivenessChallengeController = ({
-  challengePlan,
-  options,
-  random = getCryptoRandomFraction,
-}: CreateLivenessChallengeControllerOptions = {}): LivenessChallengeController => {
+export const createLivenessChallengeController = (
+  options: CreateLivenessChallengeControllerOptions = {},
+): LivenessChallengeController => {
   const resolvedOptions = resolveLivenessOptions(options);
   let state = getInitialState();
   let currentStepIndex = 0;
@@ -553,12 +417,8 @@ export const createLivenessChallengeController = ({
         final: { ...record.final },
         start: { ...record.start },
       })),
-      challengeId: state.challengeId,
-      checksum: state.checksum,
       completedAt: resultCompletedAt,
       completedChallenges: [...state.completedChallenges],
-      nonce: state.nonce,
-      policyVersion: state.policyVersion,
       sequence: [...state.sequence],
       telemetry: getTelemetry(resultCompletedAt),
     };
@@ -1258,21 +1118,13 @@ export const createLivenessChallengeController = ({
   };
 
   const start = (now = 0): LivenessChallengeState => {
-    const plan = resolveChallengePlan({
-      challengePlan,
-      options: resolvedOptions,
-      random,
-    });
+    const sequence = [...resolvedOptions.challenges];
     state = {
       ...getInitialState(),
-      challengeId: plan.challengeId,
-      checksum: plan.checksum,
       instruction: 'Place your face inside the guide',
-      nonce: plan.nonce,
       phase: 'stabilizing',
-      policyVersion: plan.policyVersion,
-      sequence: plan.sequence,
-      totalSteps: plan.sequence.length,
+      sequence,
+      totalSteps: sequence.length,
     };
 
     currentStepIndex = 0;

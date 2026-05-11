@@ -1,8 +1,8 @@
 import type {
-  FaceFitOptions,
   FaceFitResult,
   Rect,
-} from '../types.js';
+} from '../result.js';
+import type { FaceFitOptions } from '../config.js';
 
 export const validateFaceFit = (
   comparisonBox: Rect | null,

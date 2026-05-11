@@ -1,13 +1,12 @@
 import type {
   FaceDetectionResult,
   Rect,
-  ResolvedModelSpec,
-  SpoofAdapter,
   SpoofFrameResult,
   SpoofLabel,
-  SpoofPipeline,
   SpoofSummaryResult,
-} from '../types.js';
+} from '../result.js';
+import type { ResolvedModelSpec, SpoofAdapter, SpoofPipeline } from '../models.js';
+import { VerificationError } from '../errors.js';
 
 const SPOOF_INPUT_SIZE = 80;
 const SPOOF_LABELS = ['paper', 'real', 'screen'] as const satisfies readonly SpoofLabel[];
@@ -259,7 +258,9 @@ export const createSpoofPipeline = (adapters: readonly SpoofAdapter[]): SpoofPip
   });
 
   if (!context) {
-    throw new Error('Unable to create spoof canvas context.');
+    throw new VerificationError('spoof.unavailable', 'Unable to create spoof canvas context.', {
+      area: 'spoof',
+    });
   }
 
   const modelContexts = adapters.map((adapter) => ({

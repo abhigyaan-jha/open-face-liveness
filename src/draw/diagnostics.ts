@@ -1,4 +1,5 @@
-import type { LandmarkList, Rect, VerificationSnapshot } from '../types.js';
+import type { VerificationSnapshot } from '../events.js';
+import type { LandmarkList, Rect } from '../result.js';
 import { createFrameToDisplayMapper, type FrameDisplayFit, type FrameMapper } from '../capture/geometry.js';
 import type { VerificationSession } from '../flow/verification-session.js';
 

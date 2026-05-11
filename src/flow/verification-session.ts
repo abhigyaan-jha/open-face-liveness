@@ -9,12 +9,21 @@ import {
   type VerificationMachineResourceContext,
 } from './machine.js';
 import {
-  isVerificationError,
+  toVerificationError,
   VerificationError,
+  type VerificationErrorDetail,
   type VerificationErrorCode,
 } from '../errors.js';
 import type {
+  VerificationOptions as CoreVerificationOptions,
+} from '../config.js';
+import type {
   DiagnosticsFrame,
+  VerificationEvent,
+  VerificationSnapshot,
+  VerificationStage,
+} from '../events.js';
+import type {
   FaceAnchorPosition,
   FaceDetectionResult,
   FaceFitResult,
@@ -27,13 +36,8 @@ import type {
   LivenessChallengeState,
   SpoofFrameResult,
   SpoofSummaryResult,
-  VerificationOptions as CoreVerificationOptions,
-  VerificationEvent,
-  VerificationFailureDetail,
   VerificationResult,
-  VerificationSnapshot,
-  VerificationStage,
-} from '../types.js';
+} from '../result.js';
 import {
   createLightPipeline,
   createLivenessChallengeController,
@@ -43,7 +47,6 @@ import {
   getFaceComparisonBox,
   getFaceGuideRect,
   isAnchorStable,
-  isVerificationRuntimeError,
   loadPhaseOneRuntime,
   summarizeSpoofSamples,
   validateFaceFit,
@@ -105,6 +108,10 @@ const toCameraError = (error: unknown): VerificationError => {
 };
 
 const getSnapshotErrorCode = (snapshot: WebVerificationSnapshot): VerificationErrorCode => {
+  if (snapshot.errorDetail) {
+    return snapshot.errorDetail.code;
+  }
+
   switch (snapshot.lastEvent?.type) {
     case 'CAMERA_DENIED':
       return 'camera.permission_denied';
@@ -114,19 +121,23 @@ const getSnapshotErrorCode = (snapshot: WebVerificationSnapshot): VerificationEr
       return 'models.load_failed';
     case 'ERROR':
       return 'analysis.failed';
+    case 'STOP':
+      return 'session.cancelled';
     default:
       return 'unknown';
   }
 };
 
-const createRequiredCheckFailureDetail = (
-  check: VerificationFailureDetail['check'],
-  code: VerificationFailureDetail['code'],
+const createErrorDetail = (
+  area: VerificationErrorDetail['area'],
+  code: VerificationErrorDetail['code'],
   message: string,
-): VerificationFailureDetail => ({
-  check,
+  recoverable = false,
+): VerificationErrorDetail => ({
+  area,
   code,
   message,
+  recoverable,
 });
 
 const createLightIlluminationController = () => {
@@ -251,12 +262,11 @@ const createLoadModelsActor = () =>
     try {
       bundle = await loadPhaseOneRuntime({ checks, models });
     } catch (error) {
-      const detail = isVerificationRuntimeError(error) ? error.detail : null;
-      throw new VerificationError(
-        'models.load_failed',
-        detail?.message ?? 'Face verification could not start. Please try again.',
-        { cause: error, detail },
-      );
+      throw toVerificationError(error, {
+        area: 'models',
+        code: 'models.load_failed',
+        message: 'Face verification could not start. Please try again.',
+      });
     }
 
     return {
@@ -268,7 +278,6 @@ const createLoadModelsActor = () =>
 const createAnalyzeFaceActor = () =>
   fromCallback<AnyEventObject, AnalyzeFaceInput>(({ input, sendBack }) => {
     const {
-      challengePlan,
       checks,
       debug,
       face,
@@ -283,10 +292,7 @@ const createAnalyzeFaceActor = () =>
     const hasLiveness = checks.includes('liveness');
     const hasSpoof = checks.includes('spoof');
     const livenessController: LivenessChallengeController | null = hasLiveness
-      ? createLivenessChallengeController({
-          challengePlan: challengePlan ?? undefined,
-          options: liveness,
-        })
+      ? createLivenessChallengeController(liveness)
       : null;
     const illumination = createLightIlluminationController();
     const lightPipeline: LightPipeline | null = hasLight
@@ -312,15 +318,15 @@ const createAnalyzeFaceActor = () =>
       ? summarizeSpoofSamples(spoofSamples, skippedSpoofSamples)
       : null;
 
-    const getRequiredSpoofFailure = (): VerificationFailureDetail | null => {
+    const getRequiredSpoofFailure = (): VerificationErrorDetail | null => {
       if (!hasSpoof) {
         return null;
       }
 
       if (!spoofSummary || spoofSummary.modelsUsed <= 0 || spoofSummary.sampleCount <= 0) {
-        return createRequiredCheckFailureDetail(
+        return createErrorDetail(
           'spoof',
-          'insufficient_evidence',
+          'spoof.insufficient_evidence',
           'Required spoof check did not produce evidence.',
         );
       }
@@ -328,10 +334,10 @@ const createAnalyzeFaceActor = () =>
       return null;
     };
 
-    const sendRequiredCheckFailure = (failureDetail: VerificationFailureDetail): void => {
+    const sendRequiredCheckFailure = (errorDetail: VerificationErrorDetail): void => {
       sendEvent({
-        error: failureDetail.message,
-        failureDetail,
+        error: errorDetail.message,
+        errorDetail,
         type: 'ERROR',
       });
     };
@@ -529,12 +535,12 @@ const createAnalyzeFaceActor = () =>
 
       if (!runtime.spoof) {
         throw new VerificationError(
-          'analysis.failed',
+          'spoof.unavailable',
           'Required spoof check is unavailable.',
           {
-            detail: createRequiredCheckFailureDetail(
+            detail: createErrorDetail(
               'spoof',
-              'required_check_unavailable',
+              'spoof.unavailable',
               'Required spoof check is unavailable.',
             ),
           },
@@ -841,10 +847,14 @@ const createAnalyzeFaceActor = () =>
         emitDebugFrame(diagnostics);
         frameIndex += 1;
       } catch (error) {
-        const failureDetail = isVerificationError(error) ? error.detail : null;
+        const verificationError = toVerificationError(error, {
+          area: 'analysis',
+          code: 'analysis.failed',
+          message: 'Face verification failed. Please try again.',
+        });
         sendEvent({
-          error: getErrorMessage(error, 'Face verification failed. Please try again.'),
-          failureDetail,
+          error: getErrorMessage(verificationError, 'Face verification failed. Please try again.'),
+          errorDetail: verificationError.detail,
           type: 'ERROR',
         });
       }
@@ -898,7 +908,13 @@ export const createVerificationSession = (options: VerificationOptions): Verific
             return;
           }
 
-          reject(new Error('Verification completed without a result.'));
+          reject(
+            new VerificationError(
+              'session.completed_without_result',
+              'Verification completed without a result.',
+              { area: 'session' },
+            ),
+          );
           return;
         }
 
@@ -908,7 +924,7 @@ export const createVerificationSession = (options: VerificationOptions): Verific
             new VerificationError(
               getSnapshotErrorCode(snapshot),
               snapshot.error ?? snapshot.instruction,
-              { detail: snapshot.failureDetail },
+              { detail: snapshot.errorDetail },
             ),
           );
         }

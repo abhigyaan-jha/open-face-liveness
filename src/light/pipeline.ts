@@ -11,8 +11,9 @@ import type {
   LightTestStatus,
   LightTestStepComparison,
   Rect,
-  ResolvedLightTestOptions,
-} from '../types.js';
+} from '../result.js';
+import type { ResolvedLightTestOptions } from '../config.js';
+import { cloneLightTestColor } from './sequence.js';
 
 export interface LightPipelineFrame {
   detection: FaceDetectionResult;
@@ -131,36 +132,6 @@ const clamp = (value: number, min: number, max: number): number => Math.min(Math
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
-
-const cloneLightTestColor = (color: LightTestColor): LightTestColor => ({
-  ...color,
-  rgb: [color.rgb[0], color.rgb[1], color.rgb[2]],
-});
-
-const getCryptoRandomFraction = (): number => {
-  const cryptoApi = globalThis.crypto;
-  if (cryptoApi?.getRandomValues) {
-    const values = new Uint32Array(1);
-    cryptoApi.getRandomValues(values);
-    return (values[0] ?? 0) / (0xffffffff + 1);
-  }
-
-  return Math.random();
-};
-
-const createLightTestColorSequence = (
-  colors: readonly LightTestColor[],
-  sequenceLength: number,
-): readonly LightTestColor[] => {
-  const sequence = colors.map(cloneLightTestColor);
-
-  for (let index = sequence.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(clamp(getCryptoRandomFraction(), 0, 0.999999999) * (index + 1));
-    [sequence[index], sequence[swapIndex]] = [sequence[swapIndex], sequence[index]];
-  }
-
-  return sequence.slice(0, Math.max(1, Math.min(sequenceLength, sequence.length)));
-};
 
 const createEmptySample = (
   sampleRects: readonly Rect[] = [],
@@ -1197,7 +1168,7 @@ export const createLightPipeline = ({
   onIlluminationChange,
   options,
 }: CreateLightPipelineOptions): LightPipeline => {
-  const sequence = createLightTestColorSequence(options.colors, options.colorSequenceLength);
+  const sequence = options.sequence.map(cloneLightTestColor);
   const openCv = createOpenCvSampler(options);
   let activeColor: LightTestColor | null = null;
   let afterCaptureReadyAt = 0;

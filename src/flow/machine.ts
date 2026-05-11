@@ -1,31 +1,32 @@
 import type { AnyEventObject, CallbackActorLogic, DoneActorEvent, PromiseActorLogic } from 'xstate';
 import { assign, setup } from 'xstate';
-import type { PhaseOneRuntimeBundle } from '../types.js';
+import type { PhaseOneRuntimeBundle, ResolvedModelSpec, VerificationModelsOptions } from '../models.js';
 import { getInstructionForStage } from '../liveness/instructions.js';
 import type { CameraHandle } from '../capture/camera.js';
 import { resolveVerificationOptions } from './options.js';
 import { createVerificationSnapshot } from './snapshot.js';
 import type {
-  CameraStreamInfo,
   FaceFitOptions,
+  ResolvedDebugOptions,
+  ResolvedLightTestOptions,
+  ResolvedLivenessChallengeOptions,
+  VerificationCheck,
+  VerificationOptions,
+} from '../config.js';
+import type {
+  CameraStreamInfo,
+  VerificationContext,
+  VerificationEvent,
+} from '../events.js';
+import { VerificationError, isVerificationErrorDetail, type VerificationErrorDetail } from '../errors.js';
+import type {
   LightTestResult,
   LightTestState,
   LivenessChallengeResult,
-  LivenessChallengePlan,
   LivenessChallengeState,
-  ResolvedDebugOptions,
-  ResolvedLightTestOptions,
-  ResolvedModelSpec,
-  ResolvedLivenessChallengeOptions,
-  VerificationCheck,
   SpoofSummaryResult,
-  VerificationContext,
-  VerificationEvent,
-  VerificationFailureDetail,
-  VerificationModelsOptions,
-  VerificationOptions,
   VerificationResult,
-} from '../types.js';
+} from '../result.js';
 
 export interface VerificationMachineResources {
   cameraHandle: CameraHandle | null;
@@ -53,7 +54,6 @@ export interface LoadModelsOutput {
 }
 
 export interface AnalyzeFaceInput {
-  challengePlan: LivenessChallengePlan | null;
   checks: readonly VerificationCheck[];
   debug: ResolvedDebugOptions;
   face: FaceFitOptions;
@@ -101,33 +101,21 @@ const getEventError = (event: unknown): string => {
   return 'Verification failed. Please try again.';
 };
 
-const isFailureDetail = (value: unknown): value is VerificationFailureDetail => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<VerificationFailureDetail>;
-  return typeof candidate.check === 'string' &&
-    typeof candidate.code === 'string' &&
-    typeof candidate.message === 'string' &&
-    candidate.message.length > 0;
-};
-
-const getFailureDetail = (value: unknown): VerificationFailureDetail | null => {
+const getErrorDetail = (value: unknown): VerificationErrorDetail | null => {
   if (!value || typeof value !== 'object') {
     return null;
   }
 
-  if ('failureDetail' in value && isFailureDetail((value as { failureDetail?: unknown }).failureDetail)) {
-    return (value as { failureDetail: VerificationFailureDetail }).failureDetail;
+  if ('errorDetail' in value && isVerificationErrorDetail((value as { errorDetail?: unknown }).errorDetail)) {
+    return (value as { errorDetail: VerificationErrorDetail }).errorDetail;
   }
 
-  if ('detail' in value && isFailureDetail((value as { detail?: unknown }).detail)) {
-    return (value as { detail: VerificationFailureDetail }).detail;
+  if ('detail' in value && isVerificationErrorDetail((value as { detail?: unknown }).detail)) {
+    return (value as { detail: VerificationErrorDetail }).detail;
   }
 
   if ('error' in value) {
-    return getFailureDetail((value as { error?: unknown }).error);
+    return getErrorDetail((value as { error?: unknown }).error);
   }
 
   return null;
@@ -204,7 +192,7 @@ const createResult = (
 const stageAction = (stage: VerificationMachineResourceContext['stage']) =>
   machineAssign(({ context }: MachineContextArgs) => ({
     error: stage === 'failed' ? context.error : null,
-    failureDetail: stage === 'failed' ? context.failureDetail : null,
+    errorDetail: stage === 'failed' ? context.errorDetail : null,
     instruction: getInstructionForStage(stage, context.error),
     stage,
   }));
@@ -282,14 +270,14 @@ const assignAnalysisEvent = machineAssign(({ context, event }: MachineContextEve
 const assignFailure = (type: FailureEventType) =>
   machineAssign(({ event }: MachineEventArgs) => {
     const error = getEventError(event);
-    const failureDetail = getFailureDetail(event);
+    const errorDetail = getErrorDetail(event);
 
     return {
       error,
-      failureDetail,
+      errorDetail,
       lastEvent: {
         error,
-        failureDetail,
+        errorDetail,
         type,
       },
     };
@@ -397,14 +385,17 @@ const loadModelsInput = ({ context }: MachineContextArgs): LoadModelsInput => ({
 
 const requireModelsHandle = (context: VerificationMachineResourceContext): PhaseOneRuntimeBundle => {
   if (!context.resources.modelsHandle) {
-    throw new Error('Models must be loaded before face analysis starts.');
+    throw new VerificationError(
+      'session.invalid_state',
+      'Models must be loaded before face analysis starts.',
+      { area: 'session' },
+    );
   }
 
   return context.resources.modelsHandle;
 };
 
 const analyzeFaceInput = ({ context }: MachineContextArgs): AnalyzeFaceInput => ({
-  challengePlan: context.options.challengePlan,
   checks: context.checks,
   debug: context.debug,
   face: context.options.face,
@@ -467,7 +458,7 @@ const clearRuntimeData = machineAssign(() => ({
   detection: null,
   diagnostics: null,
   error: null,
-  failureDetail: null,
+  errorDetail: null,
   faceFit: null,
   lastEvent: null,
   light: null,
@@ -508,7 +499,7 @@ export const createInitialVerificationContext = (
     detection: null,
     diagnostics: null,
     error: null,
-    failureDetail: null,
+    errorDetail: null,
     faceFit: null,
     instruction: getInstructionForStage('idle'),
     lastEvent: null,

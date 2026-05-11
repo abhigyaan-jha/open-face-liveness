@@ -1,4 +1,4 @@
-import type { VerificationContext, VerificationStage } from '../types.js';
+import type { VerificationContext, VerificationStage } from '../events.js';
 
 interface VerificationMachineSnapshotLike {
   context?: unknown;

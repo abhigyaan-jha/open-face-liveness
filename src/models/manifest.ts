@@ -1,4 +1,5 @@
-import type { ModelCapability, ModelManifest, ModelSpec, ResolvedModelSpec } from '../types.js';
+import type { ModelCapability, ModelManifest, ModelSpec, ResolvedModelSpec } from '../models.js';
+import { VerificationError } from '../errors.js';
 
 const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'liveness', 'spoof', 'light'];
 
@@ -7,20 +8,30 @@ const isModelCapability = (value: unknown): value is ModelCapability =>
 
 const toModelSpec = (entry: unknown): ModelSpec => {
   if (!entry || typeof entry !== 'object') {
-    throw new Error('Invalid model manifest entry.');
+    throw new VerificationError('models.manifest_invalid', 'Invalid model manifest entry.', {
+      area: 'models',
+    });
   }
 
   const record = entry as Record<string, unknown>;
   if (!isModelCapability(record.capability)) {
-    throw new Error(`Unsupported model capability: ${String(record.capability)}`);
+    throw new VerificationError(
+      'models.manifest_invalid',
+      `Unsupported model capability: ${String(record.capability)}`,
+      { area: 'models' },
+    );
   }
 
   if (typeof record.id !== 'string' || record.id.length === 0) {
-    throw new Error('Model manifest entry is missing an id.');
+    throw new VerificationError('models.manifest_invalid', 'Model manifest entry is missing an id.', {
+      area: 'models',
+    });
   }
 
   if (typeof record.url !== 'string' || record.url.length === 0) {
-    throw new Error(`Model '${record.id}' is missing a url.`);
+    throw new VerificationError('models.manifest_invalid', `Model '${record.id}' is missing a url.`, {
+      area: 'models',
+    });
   }
 
   return {
@@ -35,12 +46,18 @@ const toModelSpec = (entry: unknown): ModelSpec => {
 
 export const parseModelManifest = (raw: unknown): ModelManifest => {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('Model manifest must be an object.');
+    throw new VerificationError('models.manifest_invalid', 'Model manifest must be an object.', {
+      area: 'models',
+    });
   }
 
   const record = raw as Record<string, unknown>;
   if (!Array.isArray(record.models)) {
-    throw new Error("Model manifest must include a 'models' array.");
+    throw new VerificationError(
+      'models.manifest_invalid',
+      "Model manifest must include a 'models' array.",
+      { area: 'models' },
+    );
   }
 
   return {
@@ -57,7 +74,11 @@ export const loadModelManifest = async (manifestUrl: string): Promise<ModelManif
   });
 
   if (!response.ok) {
-    throw new Error(`Unable to load model manifest: ${response.status} ${response.statusText}`);
+    throw new VerificationError(
+      'models.manifest_load_failed',
+      `Unable to load model manifest: ${response.status} ${response.statusText}`,
+      { area: 'models' },
+    );
   }
 
   return parseModelManifest(await response.json());
@@ -78,7 +99,11 @@ export const requireModelCapability = (
 ): ResolvedModelSpec => {
   const model = models.find((entry) => entry.capability === capability);
   if (!model) {
-    throw new Error(`Required model '${capability}' is missing from the manifest.`);
+    throw new VerificationError(
+      'models.required_model_missing',
+      `Required model '${capability}' is missing from the manifest.`,
+      { area: 'models' },
+    );
   }
 
   return model;

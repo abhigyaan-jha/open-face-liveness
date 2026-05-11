@@ -7,17 +7,30 @@ export {
   getRgbChromaticity,
   sampleLightTestImageData,
   summarizeLightTestSequence,
-} from '../pipelines/light.js';
+} from './pipeline.js';
+export {
+  DEFAULT_LIGHT_SEQUENCE,
+  DEFAULT_LIGHT_TEST_COLORS,
+  createLightSequence,
+  resolveLightSequence,
+} from './sequence.js';
 export type {
   CreateLightPipelineOptions,
   LightPipeline,
   LightPipelineFrame,
   LightPipelineUpdate,
-} from '../pipelines/light.js';
+} from './pipeline.js';
+export type {
+  CreateLightSequenceOptions,
+  LightRandomSource,
+} from './sequence.js';
+export type {
+  LightTestOptions,
+  ResolvedLightTestOptions,
+} from '../config.js';
 export type {
   LightTestChroma,
   LightTestColor,
-  LightTestOptions,
   LightTestPassChecks,
   LightTestPhase,
   LightTestResult,
@@ -25,5 +38,4 @@ export type {
   LightTestState,
   LightTestStatus,
   LightTestStepComparison,
-  ResolvedLightTestOptions,
-} from '../types.js';
+} from '../result.js';

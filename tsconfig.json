@@ -2,6 +2,7 @@
   "compilerOptions": {
     "declaration": true,
     "declarationMap": true,
+    "jsx": "react-jsx",
     "lib": ["DOM", "ES2022"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -14,4 +15,3 @@
   },
   "include": ["src", "test", "demo/browser"]
 }
-

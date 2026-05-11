@@ -1,30 +1,37 @@
 export {
   DEFAULT_LIVENESS_OPTIONS,
-  LIVENESS_CHALLENGE_TYPES,
   createLivenessChallengeController,
-  createLivenessChecksum,
   extractLivenessChallengeMetrics,
-  generateLivenessChallengeSequence,
   resolveLivenessOptions,
-} from '../pipelines/liveness.js';
+} from './challenge.js';
+export {
+  DEFAULT_LIVENESS_CHALLENGES,
+  LIVENESS_CHALLENGE_TYPES,
+  createLivenessSequence,
+  resolveLivenessSequence,
+} from './sequence.js';
 export { getInstructionForStage } from './instructions.js';
 export type {
   CreateLivenessChallengeControllerOptions,
   LivenessChallengeController,
+} from './challenge.js';
+export type {
+  CreateLivenessSequenceOptions,
   LivenessRandomSource,
-} from '../pipelines/liveness.js';
+} from './sequence.js';
+export type {
+  LivenessChallengeOptions,
+  ResolvedLivenessChallengeOptions,
+} from '../config.js';
 export type {
   LivenessChallengeDirection,
   LivenessChallengeFrame,
   LivenessChallengeMetrics,
-  LivenessChallengeOptions,
   LivenessChallengePhase,
-  LivenessChallengePlan,
   LivenessChallengePoseSnapshot,
   LivenessChallengeRecord,
   LivenessChallengeResult,
   LivenessChallengeState,
   LivenessChallengeTelemetry,
   LivenessChallengeType,
-  ResolvedLivenessChallengeOptions,
-} from '../types.js';
+} from '../result.js';

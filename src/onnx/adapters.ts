@@ -8,7 +8,8 @@ import type {
   ResolvedModelSpec,
   SpoofAdapter,
   SpoofRawResult,
-} from '../types.js';
+} from '../models.js';
+import { VerificationError } from '../errors.js';
 
 const DETECTOR_NUM_COORDS = 16;
 const DETECTOR_NUM_BOXES = 896;
@@ -133,9 +134,16 @@ const int32Scalar = (value: number): ort.Tensor =>
 
 const createSession = async (url: string): Promise<ort.InferenceSession> => {
   configureOrt();
-  return ort.InferenceSession.create(url, {
-    executionProviders: ['wasm'],
-  });
+  try {
+    return await ort.InferenceSession.create(url, {
+      executionProviders: ['wasm'],
+    });
+  } catch (error) {
+    throw new VerificationError('models.load_failed', `Unable to load ONNX model: ${url}`, {
+      area: 'models',
+      cause: error,
+    });
+  }
 };
 
 const releaseSession = async (session: ort.InferenceSession) => {
@@ -148,7 +156,11 @@ export const createOnnxDetectorAdapter = async (model: ResolvedModelSpec): Promi
   const outputNames = [...session.outputNames];
 
   if (!inputName) {
-    throw new Error(`Detector model '${model.id}' is missing an input.`);
+    throw new VerificationError(
+      'models.adapter_invalid',
+      `Detector model '${model.id}' is missing an input.`,
+      { area: 'models' },
+    );
   }
 
   return {
@@ -196,7 +208,11 @@ const getMeshIo = (session: ort.InferenceSession) => {
     !scoreOutputName ||
     !landmarksOutputName
   ) {
-    throw new Error('Unexpected face mesh model I/O signature.');
+    throw new VerificationError(
+      'models.adapter_invalid',
+      'Unexpected face mesh model I/O signature.',
+      { area: 'models' },
+    );
   }
 
   return {
@@ -266,7 +282,11 @@ export const createOnnxSpoofAdapter = async (model: ResolvedModelSpec): Promise<
   const outputNames = [...session.outputNames];
 
   if (!inputName || !outputName) {
-    throw new Error(`Spoof model '${model.id}' is missing an input or output.`);
+    throw new VerificationError(
+      'models.adapter_invalid',
+      `Spoof model '${model.id}' is missing an input or output.`,
+      { area: 'models' },
+    );
   }
 
   return {

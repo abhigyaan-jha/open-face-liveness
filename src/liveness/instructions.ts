@@ -1,4 +1,5 @@
-import type { VerificationCheck, VerificationStage } from '../types.js';
+import type { VerificationCheck } from '../config.js';
+import type { VerificationStage } from '../events.js';
 
 export const VERIFICATION_CHECKS = ['face', 'liveness', 'spoof', 'light'] as const satisfies readonly VerificationCheck[];
 

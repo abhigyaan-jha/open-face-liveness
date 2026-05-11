@@ -1,7 +1,19 @@
 export { loadModelManifest, parseModelManifest, requireModelCapability, resolveModelSpecs } from './models/manifest.js';
 export { loadPhaseOneRuntime } from './models/loader.js';
-export { VerificationRuntimeError, isVerificationRuntimeError } from './errors.js';
-export { attachIoMetadata, createOnnxDetectorAdapter, createOnnxMeshAdapter, createOnnxSpoofAdapter } from './providers/onnx.js';
+export {
+  VerificationError,
+  VerificationRuntimeError,
+  isVerificationError,
+  isVerificationRuntimeError,
+  toVerificationError,
+} from './errors.js';
+export type {
+  VerificationErrorArea,
+  VerificationErrorCode,
+  VerificationErrorDetail,
+  VerificationErrorOptions,
+} from './errors.js';
+export { attachIoMetadata, createOnnxDetectorAdapter, createOnnxMeshAdapter, createOnnxSpoofAdapter } from './onnx/adapters.js';
 export {
   validateFaceFit,
 } from './face/fit.js';
@@ -26,27 +38,33 @@ export {
   getRgbChromaticity,
   sampleLightTestImageData,
   summarizeLightTestSequence,
-} from './pipelines/light.js';
+} from './light/pipeline.js';
 export type {
   CreateLightPipelineOptions,
   LightPipeline,
   LightPipelineFrame,
   LightPipelineUpdate,
-} from './pipelines/light.js';
+} from './light/pipeline.js';
 export {
   DEFAULT_LIVENESS_OPTIONS,
-  LIVENESS_CHALLENGE_TYPES,
   createLivenessChallengeController,
-  createLivenessChecksum,
   extractLivenessChallengeMetrics,
-  generateLivenessChallengeSequence,
   resolveLivenessOptions,
-} from './pipelines/liveness.js';
+} from './liveness/challenge.js';
+export {
+  DEFAULT_LIVENESS_CHALLENGES,
+  LIVENESS_CHALLENGE_TYPES,
+  createLivenessSequence,
+  resolveLivenessSequence,
+} from './liveness/sequence.js';
 export type {
   CreateLivenessChallengeControllerOptions,
   LivenessChallengeController,
+} from './liveness/challenge.js';
+export type {
+  CreateLivenessSequenceOptions,
   LivenessRandomSource,
-} from './pipelines/liveness.js';
+} from './liveness/sequence.js';
 export { createMeshPipeline } from './face/mesh.js';
 export {
   createEmptySpoofSummary,
@@ -55,16 +73,48 @@ export {
   parseSpoofModelScale,
   softmax,
   summarizeSpoofSamples,
-} from './pipelines/spoof.js';
+} from './spoof/pipeline.js';
+export {
+  DEFAULT_LIGHT_SEQUENCE,
+  DEFAULT_LIGHT_TEST_COLORS,
+  createLightSequence,
+  resolveLightSequence,
+} from './light/sequence.js';
+export type {
+  CreateLightSequenceOptions,
+  LightRandomSource,
+} from './light/sequence.js';
 export { loadPhaseOneRuntime as createPhaseOneRuntime } from './models/loader.js';
+export type {
+  FaceFitOptions,
+  LightTestOptions,
+  LivenessChallengeOptions,
+  ResolvedLivenessChallengeOptions,
+  ResolvedLightTestOptions,
+} from './config.js';
 export type {
   DetectorAdapter,
   DetectorPipeline,
   DetectorRawResult,
+  LoadPhaseOneRuntimeOptions,
+  MeshAdapter,
+  MeshPipeline,
+  MeshRawInput,
+  MeshRawResult,
+  ModelCapability,
+  ModelManifest,
+  ModelSpec,
+  PhaseOneRuntimeBundle,
+  ResolvedModelSpec,
+  SpoofAdapter,
+  SpoofPipeline,
+  SpoofRawResult,
+  VerificationModelsOptions,
+} from './models.js';
+export type {
   FaceDetectionResult,
   FaceAnchorDrift,
   FaceAnchorPosition,
-  FaceFitOptions,
   FaceFitResult,
   FaceStabilityResult,
   FaceMeshResult,
@@ -73,7 +123,6 @@ export type {
   LandmarkList,
   LightTestChroma,
   LightTestColor,
-  LightTestOptions,
   LightTestPassChecks,
   LightTestPhase,
   LightTestResult,
@@ -84,35 +133,17 @@ export type {
   LivenessChallengeDirection,
   LivenessChallengeFrame,
   LivenessChallengeMetrics,
-  LivenessChallengeOptions,
   LivenessChallengePhase,
-  LivenessChallengePlan,
   LivenessChallengePoseSnapshot,
   LivenessChallengeRecord,
   LivenessChallengeResult,
   LivenessChallengeState,
   LivenessChallengeTelemetry,
   LivenessChallengeType,
-  LoadPhaseOneRuntimeOptions,
-  MeshAdapter,
-  MeshPipeline,
-  MeshRawInput,
-  MeshRawResult,
-  ModelCapability,
-  ModelManifest,
-  ModelSpec,
-  PhaseOneRuntimeBundle,
   Point3D,
   Rect,
-  ResolvedLivenessChallengeOptions,
-  ResolvedLightTestOptions,
-  ResolvedModelSpec,
-  SpoofAdapter,
   SpoofFrameResult,
   SpoofLabel,
-  SpoofPipeline,
-  SpoofRawResult,
   SpoofSummaryResult,
-  VerificationModelsOptions,
   ZRange,
-} from './types.js';
+} from './result.js';

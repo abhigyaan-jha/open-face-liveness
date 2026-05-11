@@ -5,13 +5,14 @@ export {
   parseSpoofModelScale,
   softmax,
   summarizeSpoofSamples,
-} from '../pipelines/spoof.js';
+} from './pipeline.js';
 export type {
   SpoofAdapter,
-  SpoofFrameResult,
-  SpoofLabel,
   SpoofPipeline,
   SpoofRawResult,
+} from '../models.js';
+export type {
+  SpoofFrameResult,
+  SpoofLabel,
   SpoofSummaryResult,
-} from '../types.js';
-
+} from '../result.js';

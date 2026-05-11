@@ -1,29 +1,25 @@
-import type { ResolvedModelSpec } from '../types.js';
+import type { ResolvedModelSpec } from '../models.js';
 import {
   attachIoMetadata,
   createOnnxDetectorAdapter,
   createOnnxMeshAdapter,
   createOnnxSpoofAdapter,
-} from '../providers/onnx.js';
+} from '../onnx/adapters.js';
 import { createDetectorPipeline } from '../face/detector.js';
 import { createMeshPipeline } from '../face/mesh.js';
-import { createSpoofPipeline } from '../pipelines/spoof.js';
-import { VerificationRuntimeError } from '../errors.js';
-import type { LoadPhaseOneRuntimeOptions, PhaseOneRuntimeBundle, SpoofAdapter } from '../types.js';
+import { createSpoofPipeline } from '../spoof/pipeline.js';
+import { VerificationError } from '../errors.js';
+import type { LoadPhaseOneRuntimeOptions, PhaseOneRuntimeBundle, SpoofAdapter } from '../models.js';
 import { loadModelManifest, requireModelCapability, resolveModelSpecs } from './manifest.js';
 
 const createRequiredSpoofUnavailableError = (
   message = 'Required spoof check could not be initialized.',
   cause?: unknown,
-): VerificationRuntimeError =>
-  new VerificationRuntimeError(
-    {
-      check: 'spoof',
-      code: 'required_check_unavailable',
-      message,
-    },
-    { cause },
-  );
+): VerificationError =>
+  new VerificationError('spoof.unavailable', message, {
+    area: 'spoof',
+    cause,
+  });
 
 const disposeSpoofAdapters = async (adapters: readonly SpoofAdapter[]): Promise<void> => {
   await Promise.all(adapters.map((adapter) => adapter.dispose()));

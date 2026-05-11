@@ -2,11 +2,28 @@ export { defaultConfig, resolveConfig } from './config.js';
 export type {
   CheckConfig,
   DebugConfig,
+  DebugOptions,
+  FaceFitOptions,
+  LightTestOptions,
+  LivenessChallengeOptions,
   ModelConfig,
+  ResolvedDebugOptions,
+  ResolvedLightTestOptions,
+  ResolvedLivenessChallengeOptions,
+  ResolvedVerificationOptions,
+  RuntimeVerificationCheck,
+  VerificationActorInspect,
+  VerificationCheck,
+  VerificationOptions,
   WebVerifyConfig,
   WebVerifyUserConfig,
 } from './config.js';
-export { WebVerify } from './web-verify.js';
+export { WebVerify, createWebVerifyClient } from './web-verify.js';
+export type {
+  WebVerifyCheckSelection,
+  WebVerifyClient,
+  WebVerifyStartOptions,
+} from './web-verify.js';
 export * from './runtime.js';
 export {
   createVerificationSession,
@@ -19,10 +36,18 @@ export type {
   WebVerificationSnapshot,
 } from './flow/index.js';
 export type {
-  VerificationCheck,
-  VerificationFailureDetail,
-  VerificationOptions,
-  VerificationResult,
   VerificationSnapshot,
   VerificationStage,
-} from './types.js';
+} from './events.js';
+export {
+  VerificationError,
+  isVerificationError,
+  toVerificationError,
+} from './errors.js';
+export type {
+  VerificationErrorArea,
+  VerificationErrorCode,
+  VerificationErrorDetail,
+  VerificationErrorOptions,
+} from './errors.js';
+export type { VerificationResult } from './result.js';
