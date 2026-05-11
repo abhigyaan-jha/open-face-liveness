@@ -9,17 +9,20 @@ This repository is intentionally private while the public API settles.
 ```txt
 src/web-verify.ts  main facade
 src/config.ts      shared configuration
-src/result.ts      shared result types
-src/models.ts      model manifest helpers
+src/types.ts       shared runtime and verification types
+src/runtime.ts     runtime barrel for low-level primitives
+src/models.ts      model manifest and loader helpers
 src/face/          face detection, mesh, and readiness modules
 src/flow/          verification state machine/session flow
 src/liveness/      active challenge checks and liveness scoring
 src/light/         light response checks
 src/spoof/         presentation-attack signal checks
-src/onnx/          ONNX runtime helpers
-src/opencv/        OpenCV loading/helpers
+src/onnx/          ONNX adapter helpers
+src/opencv/        OpenCV asset helpers
 src/capture/       camera and frame capture helpers
 src/draw/          guides and diagnostics overlays
+models/            default ONNX model manifest and assets
+vendor/opencv/     OpenCV worker assets used by the light check
 ```
 
 ## Intended API
@@ -41,6 +44,5 @@ const result = await verify.verify(video);
 ```sh
 bun install
 bun run typecheck
-bun test
 bun run build
 ```

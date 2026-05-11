@@ -1,5 +1,4 @@
-export { detectFace } from './detect.js';
-export { estimateFaceMesh } from './mesh.js';
-export { getFaceReadiness } from './readiness.js';
-export type { FaceReadiness } from './readiness.js';
+export * from './detect.js';
+export * from './mesh.js';
+export * from './readiness.js';
 

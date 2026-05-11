@@ -18,3 +18,5 @@ export const drawGuide = (context: CanvasRenderingContext2D, options: GuideOptio
   context.restore();
 };
 
+export { mountDiagnosticsOverlay } from './diagnostics.js';
+export type { DiagnosticsOverlayOptions } from './diagnostics.js';

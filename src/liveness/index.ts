@@ -1,29 +1,31 @@
-import type { LivenessResult } from '../result.js';
-
-export type LivenessChallengeType =
-  | 'head_pan_left'
-  | 'head_pan_right'
-  | 'head_pitch_up'
-  | 'head_pitch_down'
-  | 'mouth_open';
-
-export interface LivenessCheckOptions {
-  challengeTypes?: readonly LivenessChallengeType[];
-}
-
-export const defaultLivenessChallengeTypes: readonly LivenessChallengeType[] = [
-  'head_pan_left',
-  'head_pan_right',
-  'head_pitch_up',
-  'head_pitch_down',
-  'mouth_open',
-];
-
-export const runLivenessCheck = async (
-  _input: ImageData | HTMLCanvasElement | HTMLVideoElement,
-  _options: LivenessCheckOptions = {},
-): Promise<LivenessResult> => ({
-  completed: false,
-  score: null,
-});
-
+export {
+  DEFAULT_LIVENESS_OPTIONS,
+  LIVENESS_CHALLENGE_TYPES,
+  createLivenessChallengeController,
+  createLivenessChecksum,
+  extractLivenessChallengeMetrics,
+  generateLivenessChallengeSequence,
+  resolveLivenessOptions,
+} from '../pipelines/liveness.js';
+export { getInstructionForStage } from './instructions.js';
+export type {
+  CreateLivenessChallengeControllerOptions,
+  LivenessChallengeController,
+  LivenessRandomSource,
+} from '../pipelines/liveness.js';
+export type {
+  LivenessChallengeDirection,
+  LivenessChallengeFrame,
+  LivenessChallengeMetrics,
+  LivenessChallengeOptions,
+  LivenessChallengePhase,
+  LivenessChallengePlan,
+  LivenessChallengePoseSnapshot,
+  LivenessChallengeRecord,
+  LivenessChallengeResult,
+  LivenessChallengeState,
+  LivenessChallengeTelemetry,
+  LivenessChallengeType,
+  LivenessSelfieCheckpoint,
+  ResolvedLivenessChallengeOptions,
+} from '../types.js';

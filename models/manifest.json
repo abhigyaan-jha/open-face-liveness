@@ -1,5 +1,37 @@
 {
   "version": 1,
-  "models": []
+  "models": [
+    {
+      "id": "face-detector-front-128",
+      "capability": "detector",
+      "format": "onnx",
+      "required": true,
+      "url": "/models/face_detection_front_128x128_float32_opt.onnx",
+      "version": "verification3.0"
+    },
+    {
+      "id": "face-mesh-192-post",
+      "capability": "mesh",
+      "format": "onnx",
+      "required": true,
+      "url": "/models/face_mesh_192x192_post.onnx",
+      "version": "verification3.0"
+    },
+    {
+      "id": "silent-face-minifasnet-v2-2.7",
+      "capability": "spoof",
+      "format": "onnx",
+      "required": false,
+      "url": "/models/2.7_80x80_MiniFASNetV2.onnx",
+      "version": "verification3.0"
+    },
+    {
+      "id": "silent-face-minifasnet-v1se-4.0",
+      "capability": "spoof",
+      "format": "onnx",
+      "required": false,
+      "url": "/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
+      "version": "verification3.0"
+    }
+  ]
 }
-

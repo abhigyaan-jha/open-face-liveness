@@ -1,8 +1,3 @@
-import type { FaceResult } from '../result.js';
-
-export const detectFace = async (_input: ImageData | HTMLCanvasElement | HTMLVideoElement): Promise<FaceResult> => ({
-  box: null,
-  landmarks: [],
-  score: null,
-});
+export { createDetectorPipeline } from '../pipelines/detector.js';
+export type { DetectorAdapter, DetectorPipeline, DetectorRawResult, FaceDetectionResult } from '../types.js';
 
