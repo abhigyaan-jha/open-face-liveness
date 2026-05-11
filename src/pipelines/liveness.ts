@@ -14,7 +14,6 @@ import type {
   LivenessChallengeState,
   LivenessChallengeTelemetry,
   LivenessChallengeType,
-  LivenessSelfieCheckpoint,
   ResolvedLivenessChallengeOptions,
 } from '../types.js';
 
@@ -267,7 +266,6 @@ const getInitialState = (): LivenessChallengeState => ({
   phase: 'idle',
   policyVersion: '',
   progress: 0,
-  selfieCheckpoint: null,
   sequence: [],
   totalSteps: 0,
 });
@@ -347,7 +345,6 @@ export interface CreateLivenessChallengeControllerOptions {
 
 const validateChallengePlan = (challengePlan: LivenessChallengePlan): LivenessChallengePlan => {
   const sequence = [...challengePlan.sequence];
-  const { selfieCheckpoint } = challengePlan;
 
   if (!challengePlan.challengeId.trim()) {
     throw new Error('Liveness challenge plan challengeId is required.');
@@ -365,20 +362,6 @@ const validateChallengePlan = (challengePlan: LivenessChallengePlan): LivenessCh
     throw new Error(`Liveness challenge plan must include ${DEFAULT_CHALLENGE_COUNT} challenges.`);
   }
 
-  if (selfieCheckpoint === undefined || selfieCheckpoint === null) {
-    throw new Error('Liveness challenge plan selfieCheckpoint is required.');
-  }
-
-  if (
-    !Number.isInteger(selfieCheckpoint) ||
-    selfieCheckpoint < 1 ||
-    selfieCheckpoint > DEFAULT_CHALLENGE_COUNT
-  ) {
-    throw new Error(
-      `Liveness challenge plan selfieCheckpoint must be between 1 and ${DEFAULT_CHALLENGE_COUNT}.`,
-    );
-  }
-
   if (!challengePlan.checksum.trim()) {
     throw new Error('Liveness challenge plan checksum is required.');
   }
@@ -388,15 +371,9 @@ const validateChallengePlan = (challengePlan: LivenessChallengePlan): LivenessCh
     checksum: challengePlan.checksum,
     nonce: challengePlan.nonce,
     policyVersion: challengePlan.policyVersion,
-    selfieCheckpoint: selfieCheckpoint as LivenessSelfieCheckpoint,
     sequence,
   };
 };
-
-const createGeneratedSelfieCheckpoint = (
-  random: LivenessRandomSource,
-): LivenessSelfieCheckpoint =>
-  (Math.floor(clamp(random(), 0, 0.999999999) * DEFAULT_CHALLENGE_COUNT) + 1) as LivenessSelfieCheckpoint;
 
 const createGeneratedChallengePlan = (
   options: Pick<ResolvedLivenessChallengeOptions, 'challengeCount' | 'challengeTypes'>,
@@ -410,7 +387,6 @@ const createGeneratedChallengePlan = (
     checksum,
     nonce: checksum,
     policyVersion: 'generated',
-    selfieCheckpoint: createGeneratedSelfieCheckpoint(random),
     sequence,
   };
 };
@@ -566,8 +542,7 @@ export const createLivenessChallengeController = ({
   const getResult = (resultCompletedAt: number): LivenessChallengeResult | null => {
     if (
       state.phase !== 'complete' ||
-      state.completedChallenges.length < state.totalSteps ||
-      state.selfieCheckpoint === null
+      state.completedChallenges.length < state.totalSteps
     ) {
       return null;
     }
@@ -584,7 +559,6 @@ export const createLivenessChallengeController = ({
       completedChallenges: [...state.completedChallenges],
       nonce: state.nonce,
       policyVersion: state.policyVersion,
-      selfieCheckpoint: state.selfieCheckpoint,
       sequence: [...state.sequence],
       telemetry: getTelemetry(resultCompletedAt),
     };
@@ -1297,7 +1271,6 @@ export const createLivenessChallengeController = ({
       nonce: plan.nonce,
       phase: 'stabilizing',
       policyVersion: plan.policyVersion,
-      selfieCheckpoint: plan.selfieCheckpoint,
       sequence: plan.sequence,
       totalSteps: plan.sequence.length,
     };

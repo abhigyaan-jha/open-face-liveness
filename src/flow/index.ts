@@ -20,7 +20,6 @@ export {
   DEFAULT_LIVENESS_OPTIONS,
   resolveDebugOptions,
   resolveLightOptions,
-  resolvePrimarySelfieOptions,
   resolveVerificationOptions,
 } from './options.js';
 export { createVerificationSession } from './verification-session.js';
@@ -30,4 +29,3 @@ export type {
   WebVerificationSnapshot,
 } from './verification-session.js';
 export type { Unsubscribe } from './subscriptions.js';
-

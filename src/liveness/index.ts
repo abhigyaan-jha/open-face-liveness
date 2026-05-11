@@ -26,6 +26,5 @@ export type {
   LivenessChallengeState,
   LivenessChallengeTelemetry,
   LivenessChallengeType,
-  LivenessSelfieCheckpoint,
   ResolvedLivenessChallengeOptions,
 } from '../types.js';

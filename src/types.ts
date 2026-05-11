@@ -252,14 +252,11 @@ export interface LivenessChallengeRecord {
   startedAt: number;
 }
 
-export type LivenessSelfieCheckpoint = 1 | 2 | 3;
-
 export interface LivenessChallengePlan {
   challengeId: string;
   checksum: string;
   nonce: string;
   policyVersion: string;
-  selfieCheckpoint: LivenessSelfieCheckpoint;
   sequence: readonly LivenessChallengeType[];
 }
 
@@ -282,7 +279,6 @@ export interface LivenessChallengeState {
   phase: LivenessChallengePhase;
   policyVersion: string;
   progress: number;
-  selfieCheckpoint: LivenessSelfieCheckpoint | null;
   sequence: readonly LivenessChallengeType[];
   totalSteps: number;
 }
@@ -303,7 +299,6 @@ export interface LivenessChallengeResult {
   completedChallenges: readonly LivenessChallengeType[];
   nonce: string;
   policyVersion: string;
-  selfieCheckpoint: LivenessSelfieCheckpoint;
   sequence: readonly LivenessChallengeType[];
   telemetry: LivenessChallengeTelemetry;
 }
@@ -611,16 +606,7 @@ export interface ResolvedVerificationOptions<TVideo = unknown> {
   light: ResolvedLightTestOptions;
   liveness: ResolvedLivenessChallengeOptions;
   models: VerificationModelsOptions;
-  primarySelfie: ResolvedPrimarySelfieOptions;
   video: TVideo;
-}
-
-export interface PrimarySelfieOptions {
-  required?: boolean;
-}
-
-export interface ResolvedPrimarySelfieOptions {
-  required: boolean;
 }
 
 export interface VerificationOptions<TVideo = unknown> {
@@ -631,7 +617,6 @@ export interface VerificationOptions<TVideo = unknown> {
   light?: LightTestOptions;
   liveness?: LivenessChallengeOptions;
   models: VerificationModelsOptions;
-  primarySelfie?: PrimarySelfieOptions;
   video: TVideo;
   xstateInspect?: VerificationActorInspect;
 }
@@ -666,54 +651,12 @@ export interface FaceVerificationResult {
   stability: FaceStabilityResult;
 }
 
-export interface PrimarySelfieCapture {
-  capturedAt: number;
-  checkpoint: LivenessSelfieCheckpoint;
-  frameSize: FrameSize;
-  imageDataUrl: string;
-}
-
-export interface EvidenceTranscriptChallenge {
-  challengeId: string;
-  checksum: string;
-  nonce: string;
-  policyVersion: string;
-  selfieCheckpoint: LivenessSelfieCheckpoint;
-  sequence: readonly LivenessChallengeType[];
-}
-
-export interface EvidenceTranscriptCaptureQuality {
-  detectionScore: number | null;
-  faceAligned: boolean;
-  faceDetected: boolean;
-  faceStable: boolean;
-  faceWithinBounds: boolean;
-  landmarksDetected: boolean;
-  visibleLandmarks: number | null;
-}
-
-export interface EvidenceTranscriptCapture {
-  capturedAt: number;
-  checkpoint: LivenessSelfieCheckpoint;
-  frameIndex: number;
-  frameSize: FrameSize;
-  quality: EvidenceTranscriptCaptureQuality;
-}
-
-export interface EvidenceTranscript {
-  capture: EvidenceTranscriptCapture;
-  challenge: EvidenceTranscriptChallenge;
-  primarySelfie: PrimarySelfieCapture;
-}
-
 export interface VerificationResult {
   checks: readonly VerificationCheck[];
   completedAt: number;
-  evidenceTranscript: EvidenceTranscript | null;
   face: FaceVerificationResult | null;
   light: LightTestResult | null;
   liveness: LivenessChallengeResult | null;
-  primarySelfie: PrimarySelfieCapture | null;
   spoof: SpoofSummaryResult | null;
 }
 
@@ -725,12 +668,10 @@ export interface CameraStreamInfo {
 export interface VerificationAnalysisPayload {
   detection?: FaceDetectionResult | null;
   diagnostics?: DiagnosticsFrame | null;
-  evidenceTranscript?: EvidenceTranscript | null;
   faceFit?: FaceFitResult | null;
   light?: LightTestState | null;
   lightResult?: LightTestResult | null;
   mesh?: FaceMeshResult | null;
-  primarySelfie?: PrimarySelfieCapture | null;
   spoof?: SpoofFrameResult | null;
   spoofSummary?: SpoofSummaryResult | null;
   stability?: FaceStabilityResult | null;
@@ -766,7 +707,6 @@ export interface VerificationContext<TVideo = unknown> {
   debug: ResolvedDebugOptions;
   detection: FaceDetectionResult | null;
   diagnostics: DiagnosticsFrame | null;
-  evidenceTranscript: EvidenceTranscript | null;
   error: string | null;
   failureDetail: VerificationFailureDetail | null;
   faceFit: FaceFitResult | null;
@@ -779,7 +719,6 @@ export interface VerificationContext<TVideo = unknown> {
   mesh: FaceMeshResult | null;
   models: ResolvedModelSpec[];
   options: ResolvedVerificationOptions<TVideo>;
-  primarySelfie: PrimarySelfieCapture | null;
   result: VerificationResult | null;
   spoof: SpoofFrameResult | null;
   spoofSummary: SpoofSummaryResult | null;

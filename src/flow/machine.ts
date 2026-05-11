@@ -7,19 +7,16 @@ import { resolveVerificationOptions } from './options.js';
 import { createVerificationSnapshot } from './snapshot.js';
 import type {
   CameraStreamInfo,
-  EvidenceTranscript,
   FaceFitOptions,
   LightTestResult,
   LightTestState,
   LivenessChallengeResult,
   LivenessChallengePlan,
   LivenessChallengeState,
-  PrimarySelfieCapture,
   ResolvedDebugOptions,
   ResolvedLightTestOptions,
   ResolvedModelSpec,
   ResolvedLivenessChallengeOptions,
-  ResolvedPrimarySelfieOptions,
   VerificationCheck,
   SpoofSummaryResult,
   VerificationContext,
@@ -63,7 +60,6 @@ export interface AnalyzeFaceInput {
   light: ResolvedLightTestOptions;
   liveness: ResolvedLivenessChallengeOptions;
   modelsHandle: PhaseOneRuntimeBundle;
-  primarySelfie: ResolvedPrimarySelfieOptions;
   video: HTMLVideoElement;
 }
 
@@ -169,24 +165,12 @@ const createResult = (
   livenessResult: LivenessChallengeResult | null = context.livenessResult,
   spoofSummary: SpoofSummaryResult | null = context.spoofSummary,
   lightResult: LightTestResult | null = context.lightResult,
-  primarySelfie: PrimarySelfieCapture | null = context.primarySelfie,
-  evidenceTranscript: EvidenceTranscript | null = context.evidenceTranscript,
 ): VerificationResult | null => {
-  const primarySelfieRequired = context.checks.includes('liveness') && context.options.primarySelfie.required;
-
   if (!context.detection || !context.mesh || !context.faceFit || !context.stability) {
     return null;
   }
 
   if (context.checks.includes('liveness') && !livenessResult) {
-    return null;
-  }
-
-  if (primarySelfieRequired && !primarySelfie) {
-    return null;
-  }
-
-  if (primarySelfieRequired && !evidenceTranscript) {
     return null;
   }
 
@@ -204,7 +188,6 @@ const createResult = (
   return {
     checks: context.checks,
     completedAt,
-    evidenceTranscript: context.checks.includes('liveness') ? evidenceTranscript : null,
     face: {
       completedAt,
       detection: context.detection,
@@ -214,7 +197,6 @@ const createResult = (
     },
     light: context.checks.includes('light') ? lightResult : null,
     liveness: livenessResult,
-    primarySelfie: primarySelfieRequired ? primarySelfie : null,
     spoof: context.checks.includes('spoof') ? spoofSummary : null,
   };
 };
@@ -273,10 +255,6 @@ const assignAnalysisEvent = machineAssign(({ context, event }: MachineContextEve
       'faceFit' in event
         ? (event.faceFit ?? null)
         : context.faceFit,
-    evidenceTranscript:
-      'evidenceTranscript' in event
-        ? (event.evidenceTranscript ?? context.evidenceTranscript)
-        : context.evidenceTranscript,
     lastEvent: event,
     light:
       'light' in event
@@ -288,10 +266,6 @@ const assignAnalysisEvent = machineAssign(({ context, event }: MachineContextEve
         : context.lightResult,
     mesh:
       'mesh' in event ? (event.mesh ?? null) : context.mesh,
-    primarySelfie:
-      'primarySelfie' in event
-        ? (event.primarySelfie ?? context.primarySelfie)
-        : context.primarySelfie,
     spoof:
       'spoof' in event ? (event.spoof ?? null) : context.spoof,
     spoofSummary:
@@ -346,16 +320,12 @@ const assignLivenessCompleted = (now: () => number) =>
 
     const livenessEvent = event as Extract<VerificationEvent, { type: 'LIVENESS_COMPLETED' }>;
     const completedAt = now();
-    const evidenceTranscript = livenessEvent.evidenceTranscript ?? context.evidenceTranscript;
-    const primarySelfie = livenessEvent.primarySelfie ?? context.primarySelfie;
     return {
       completedAt,
-      evidenceTranscript,
       instruction: livenessEvent.liveness.instruction,
       lastEvent: livenessEvent,
       liveness: livenessEvent.liveness,
       livenessResult: livenessEvent.result,
-      primarySelfie,
       spoofSummary: livenessEvent.spoofSummary ?? context.spoofSummary,
       result: createResult(
         context,
@@ -363,8 +333,6 @@ const assignLivenessCompleted = (now: () => number) =>
         livenessEvent.result,
         livenessEvent.spoofSummary ?? context.spoofSummary,
         context.lightResult,
-        primarySelfie,
-        evidenceTranscript,
       ),
     };
   });
@@ -407,8 +375,6 @@ const assignLightCompleted = (now: () => number) =>
         context.livenessResult,
         lightEvent.spoofSummary ?? context.spoofSummary,
         lightEvent.result,
-        context.primarySelfie,
-        context.evidenceTranscript,
       ),
     };
   });
@@ -445,7 +411,6 @@ const analyzeFaceInput = ({ context }: MachineContextArgs): AnalyzeFaceInput => 
   light: context.options.light,
   liveness: context.options.liveness,
   modelsHandle: requireModelsHandle(context),
-  primarySelfie: context.options.primarySelfie,
   video: context.options.video,
 });
 
@@ -501,7 +466,6 @@ const clearRuntimeData = machineAssign(() => ({
   completedAt: null,
   detection: null,
   diagnostics: null,
-  evidenceTranscript: null,
   error: null,
   failureDetail: null,
   faceFit: null,
@@ -512,7 +476,6 @@ const clearRuntimeData = machineAssign(() => ({
   livenessResult: null,
   mesh: null,
   models: [],
-  primarySelfie: null,
   resources: {
     cameraHandle: null,
     modelsHandle: null,
@@ -544,7 +507,6 @@ export const createInitialVerificationContext = (
     debug: resolved.debug,
     detection: null,
     diagnostics: null,
-    evidenceTranscript: null,
     error: null,
     failureDetail: null,
     faceFit: null,
@@ -557,7 +519,6 @@ export const createInitialVerificationContext = (
     mesh: null,
     models: [],
     options: resolved,
-    primarySelfie: null,
     resources: {
       cameraHandle: null,
       modelsHandle: null,

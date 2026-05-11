@@ -15,7 +15,6 @@ import {
 } from '../errors.js';
 import type {
   DiagnosticsFrame,
-  EvidenceTranscript,
   FaceAnchorPosition,
   FaceDetectionResult,
   FaceFitResult,
@@ -26,8 +25,6 @@ import type {
   LivenessChallengeMetrics,
   LivenessChallengeResult,
   LivenessChallengeState,
-  LivenessSelfieCheckpoint,
-  PrimarySelfieCapture,
   SpoofFrameResult,
   SpoofSummaryResult,
   VerificationOptions as CoreVerificationOptions,
@@ -78,9 +75,6 @@ interface LivenessCompletionHold {
   result: LivenessChallengeResult;
   state: LivenessChallengeState;
 }
-
-const PRIMARY_SELFIE_MIME_TYPE = 'image/jpeg';
-const PRIMARY_SELFIE_QUALITY = 0.92;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
@@ -232,100 +226,6 @@ const createDiagnosticsFrame = ({
   },
 });
 
-const capturePrimarySelfieFrame = ({
-  capturedAt,
-  checkpoint,
-  video,
-}: {
-  capturedAt: number;
-  checkpoint: LivenessSelfieCheckpoint;
-  video: HTMLVideoElement;
-}): PrimarySelfieCapture | null => {
-  const width = video.videoWidth || 0;
-  const height = video.videoHeight || 0;
-
-  if (!width || !height || typeof document === 'undefined') {
-    return null;
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-
-  if (!context) {
-    return null;
-  }
-
-  context.drawImage(video, 0, 0, width, height);
-
-  return {
-    capturedAt,
-    checkpoint,
-    frameSize: {
-      height,
-      width,
-    },
-    imageDataUrl: canvas.toDataURL(PRIMARY_SELFIE_MIME_TYPE, PRIMARY_SELFIE_QUALITY),
-  };
-};
-
-const isPrimarySelfieCaptureReady = (
-  state: LivenessChallengeState,
-  diagnostics: DiagnosticsFrame,
-): state is LivenessChallengeState & { selfieCheckpoint: LivenessSelfieCheckpoint } =>
-  state.phase === 'active' &&
-  state.selfieCheckpoint !== null &&
-  state.currentStep === state.selfieCheckpoint &&
-  Boolean(
-    diagnostics.detection &&
-    diagnostics.mesh &&
-    diagnostics.faceFit?.isAligned &&
-    diagnostics.faceFit.isFaceLargeEnough &&
-    diagnostics.stability?.isStable,
-  );
-
-const createEvidenceTranscript = ({
-  diagnostics,
-  primarySelfie,
-  state,
-}: {
-  diagnostics: DiagnosticsFrame;
-  primarySelfie: PrimarySelfieCapture;
-  state: LivenessChallengeState & { selfieCheckpoint: LivenessSelfieCheckpoint };
-}): EvidenceTranscript => ({
-  capture: {
-    capturedAt: primarySelfie.capturedAt,
-    checkpoint: primarySelfie.checkpoint,
-    frameIndex: diagnostics.frameIndex,
-    frameSize: {
-      height: diagnostics.frameSize.height,
-      width: diagnostics.frameSize.width,
-    },
-    quality: {
-      detectionScore: diagnostics.detection?.score ?? null,
-      faceAligned: Boolean(diagnostics.faceFit?.isAligned),
-      faceDetected: Boolean(diagnostics.detection),
-      faceStable: Boolean(diagnostics.stability?.isStable),
-      faceWithinBounds: Boolean(
-        diagnostics.faceFit?.isContainedHorizontally &&
-        diagnostics.faceFit.isContainedVertically,
-      ),
-      landmarksDetected: Boolean(diagnostics.mesh && diagnostics.mesh.visibleLandmarks > 0),
-      visibleLandmarks: diagnostics.mesh?.visibleLandmarks ?? null,
-    },
-  },
-  challenge: {
-    challengeId: state.challengeId,
-    checksum: state.checksum,
-    nonce: state.nonce,
-    policyVersion: state.policyVersion,
-    selfieCheckpoint: state.selfieCheckpoint,
-    sequence: [...state.sequence],
-  },
-  primarySelfie,
-});
-
 const createRequestCameraActor = () =>
   fromPromise<RequestCameraOutput, RequestCameraInput>(async ({ input }) => {
     const { face, video } = input;
@@ -375,7 +275,6 @@ const createAnalyzeFaceActor = () =>
       light,
       liveness,
       modelsHandle,
-      primarySelfie: primarySelfieOptions,
       video,
     } = input;
     const runtime = modelsHandle;
@@ -383,7 +282,6 @@ const createAnalyzeFaceActor = () =>
     const hasLight = checks.includes('light');
     const hasLiveness = checks.includes('liveness');
     const hasSpoof = checks.includes('spoof');
-    const shouldCapturePrimarySelfie = hasLiveness && primarySelfieOptions.required;
     const livenessController: LivenessChallengeController | null = hasLiveness
       ? createLivenessChallengeController({
           challengePlan: challengePlan ?? undefined,
@@ -406,8 +304,6 @@ const createAnalyzeFaceActor = () =>
     let livenessCompletionHold: LivenessCompletionHold | null = null;
     const livenessToLightDelayMs = hasLight ? Math.max(0, liveness.celebrationDurationMs) : 0;
     let livenessStarted = false;
-    let evidenceTranscript: EvidenceTranscript | null = null;
-    let primarySelfie: PrimarySelfieCapture | null = null;
     let stableStartedAt = 0;
     let stopped = false;
     const spoofSamples: SpoofFrameResult[] = [];
@@ -467,30 +363,6 @@ const createAnalyzeFaceActor = () =>
     const getDiagnosticsPayload = (diagnostics: DiagnosticsFrame): DiagnosticsFrame | null =>
       debug.enabled ? diagnostics : null;
 
-    const maybeCapturePrimarySelfie = (
-      livenessState: LivenessChallengeState,
-      diagnostics: DiagnosticsFrame,
-    ): PrimarySelfieCapture | null => {
-      if (!shouldCapturePrimarySelfie || primarySelfie || !isPrimarySelfieCaptureReady(livenessState, diagnostics)) {
-        return primarySelfie;
-      }
-
-      primarySelfie = capturePrimarySelfieFrame({
-        capturedAt: diagnostics.timestamp,
-        checkpoint: livenessState.selfieCheckpoint,
-        video,
-      });
-      if (primarySelfie) {
-        evidenceTranscript = createEvidenceTranscript({
-          diagnostics,
-          primarySelfie,
-          state: livenessState,
-        });
-      }
-
-      return primarySelfie;
-    };
-
     const emitLivenessUpdate = (
       diagnostics: DiagnosticsFrame,
       anchorPosition: FaceAnchorPosition | null,
@@ -504,11 +376,9 @@ const createAnalyzeFaceActor = () =>
         const payload = {
           detection: heldDiagnostics.detection,
           diagnostics: getDiagnosticsPayload(heldDiagnostics),
-          evidenceTranscript,
           faceFit: heldDiagnostics.faceFit,
           liveness: state,
           mesh: heldDiagnostics.mesh,
-          primarySelfie,
           spoof: heldDiagnostics.spoof,
           spoofSummary,
           stability: heldDiagnostics.stability,
@@ -543,25 +413,18 @@ const createAnalyzeFaceActor = () =>
         livenessStarted = true;
       }
 
-      const previousState = livenessController.getState();
       const { result, state } = livenessController.update({
         anchorPosition,
         faceFit: diagnostics.faceFit,
         metrics: diagnostics.livenessMetrics,
         timestamp: diagnostics.timestamp,
       });
-      maybeCapturePrimarySelfie(
-        state.phase === 'active' ? state : previousState,
-        diagnostics,
-      );
       const payload = {
         detection: diagnostics.detection,
         diagnostics: getDiagnosticsPayload(diagnostics),
-        evidenceTranscript,
         faceFit: diagnostics.faceFit,
         liveness: state,
         mesh: diagnostics.mesh,
-        primarySelfie,
         spoof: diagnostics.spoof,
         spoofSummary,
         stability: diagnostics.stability,

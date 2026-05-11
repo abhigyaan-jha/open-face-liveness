@@ -91,7 +91,6 @@ export type {
   LivenessChallengeState,
   LivenessChallengeTelemetry,
   LivenessChallengeType,
-  LivenessSelfieCheckpoint,
   LoadPhaseOneRuntimeOptions,
   MeshAdapter,
   MeshPipeline,

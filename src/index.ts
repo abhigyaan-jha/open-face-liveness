@@ -12,7 +12,6 @@ export {
   createVerificationSession,
   resolveDebugOptions,
   resolveLightOptions,
-  resolvePrimarySelfieOptions,
   resolveVerificationOptions,
 } from './flow/index.js';
 export type {

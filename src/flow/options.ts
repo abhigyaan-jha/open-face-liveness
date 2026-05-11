@@ -5,11 +5,9 @@ import type {
   LightTestOptions,
   LivenessChallengeOptions,
   LivenessChallengePlan,
-  PrimarySelfieOptions,
   ResolvedDebugOptions,
   ResolvedLightTestOptions,
   ResolvedLivenessChallengeOptions,
-  ResolvedPrimarySelfieOptions,
   ResolvedVerificationOptions,
   VerificationCheck,
   VerificationOptions,
@@ -86,7 +84,6 @@ const cloneLivenessChallengePlan = (
   checksum: challengePlan.checksum,
   nonce: challengePlan.nonce,
   policyVersion: challengePlan.policyVersion,
-  selfieCheckpoint: challengePlan.selfieCheckpoint,
   sequence: [...challengePlan.sequence],
 });
 
@@ -132,12 +129,6 @@ export const resolveLightOptions = (
   };
 };
 
-export const resolvePrimarySelfieOptions = (
-  options?: PrimarySelfieOptions,
-): ResolvedPrimarySelfieOptions => ({
-  required: options?.required ?? true,
-});
-
 export const resolveVerificationOptions = <TVideo>(
   options: VerificationOptions<TVideo>,
 ): ResolvedVerificationOptions<TVideo> => ({
@@ -156,7 +147,6 @@ export const resolveVerificationOptions = <TVideo>(
     manifestUrl: options.models.manifestUrl,
     overrides: options.models.overrides ? { ...options.models.overrides } : undefined,
   },
-  primarySelfie: resolvePrimarySelfieOptions(options.primarySelfie),
   video: options.video,
 });
 
@@ -165,6 +155,4 @@ export type {
   ResolvedLightTestOptions,
   LivenessChallengeOptions,
   ResolvedLivenessChallengeOptions,
-  PrimarySelfieOptions,
-  ResolvedPrimarySelfieOptions,
 };
