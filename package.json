@@ -1,0 +1,79 @@
+{
+  "name": "web-verify",
+  "version": "0.0.0",
+  "description": "Browser face verification, liveness, spoof, and capture flow toolkit.",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.4",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "models/manifest.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./capture": {
+      "types": "./dist/capture/index.d.ts",
+      "import": "./dist/capture/index.js"
+    },
+    "./draw": {
+      "types": "./dist/draw/index.d.ts",
+      "import": "./dist/draw/index.js"
+    },
+    "./face": {
+      "types": "./dist/face/index.d.ts",
+      "import": "./dist/face/index.js"
+    },
+    "./flow": {
+      "types": "./dist/flow/index.d.ts",
+      "import": "./dist/flow/index.js"
+    },
+    "./light": {
+      "types": "./dist/light/index.d.ts",
+      "import": "./dist/light/index.js"
+    },
+    "./models": {
+      "types": "./dist/models.d.ts",
+      "import": "./dist/models.js"
+    },
+    "./onnx": {
+      "types": "./dist/onnx/index.d.ts",
+      "import": "./dist/onnx/index.js"
+    },
+    "./opencv": {
+      "types": "./dist/opencv/index.d.ts",
+      "import": "./dist/opencv/index.js"
+    },
+    "./spoof": {
+      "types": "./dist/spoof/index.d.ts",
+      "import": "./dist/spoof/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.4",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "face-verification",
+    "liveness",
+    "anti-spoofing",
+    "onnx",
+    "opencv",
+    "browser"
+  ]
+}
+
