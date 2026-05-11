@@ -3,18 +3,20 @@ export { loadPhaseOneRuntime } from './models/loader.js';
 export { VerificationRuntimeError, isVerificationRuntimeError } from './errors.js';
 export { attachIoMetadata, createOnnxDetectorAdapter, createOnnxMeshAdapter, createOnnxSpoofAdapter } from './providers/onnx.js';
 export {
-  getAnchorDrift,
-  getAnchorPosition,
-  isAnchorStable,
   validateFaceFit,
-} from './face-readiness.js';
+} from './face/fit.js';
 export {
   FACE_GUIDE_ASPECT_RATIO,
   clampRectToFrame,
   getFaceComparisonBox,
   getFaceGuideRect,
-} from './geometry.js';
-export { createDetectorPipeline } from './pipelines/detector.js';
+} from './face/geometry.js';
+export {
+  getAnchorDrift,
+  getAnchorPosition,
+  isAnchorStable,
+} from './face/stability.js';
+export { createDetectorPipeline } from './face/detector.js';
 export {
   clampLightTestRect,
   createLightPipeline,
@@ -45,7 +47,7 @@ export type {
   LivenessChallengeController,
   LivenessRandomSource,
 } from './pipelines/liveness.js';
-export { createMeshPipeline } from './pipelines/mesh.js';
+export { createMeshPipeline } from './face/mesh.js';
 export {
   createEmptySpoofSummary,
   createSpoofPipeline,

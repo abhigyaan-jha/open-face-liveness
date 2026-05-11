@@ -5,8 +5,8 @@ import {
   createOnnxMeshAdapter,
   createOnnxSpoofAdapter,
 } from '../providers/onnx.js';
-import { createDetectorPipeline } from '../pipelines/detector.js';
-import { createMeshPipeline } from '../pipelines/mesh.js';
+import { createDetectorPipeline } from '../face/detector.js';
+import { createMeshPipeline } from '../face/mesh.js';
 import { createSpoofPipeline } from '../pipelines/spoof.js';
 import { VerificationRuntimeError } from '../errors.js';
 import type { LoadPhaseOneRuntimeOptions, PhaseOneRuntimeBundle, SpoofAdapter } from '../types.js';

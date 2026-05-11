@@ -12,7 +12,7 @@ src/config.ts      shared configuration
 src/types.ts       shared runtime and verification types
 src/runtime.ts     runtime barrel for low-level primitives
 src/models.ts      model manifest and loader helpers
-src/face/          face detection, mesh, and readiness modules
+src/face/          detector, mesh, fit, stability, and guide geometry
 src/flow/          verification state machine/session flow
 src/liveness/      active challenge checks and liveness scoring
 src/light/         light response checks

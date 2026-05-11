@@ -1,4 +1,4 @@
-import { getAnchorDrift } from '../face-readiness.js';
+import { getAnchorDrift } from '../face/stability.js';
 import type {
   FaceAnchorPosition,
   FaceFitResult,
@@ -461,7 +461,7 @@ export const createLivenessChallengeController = ({
     holdStartedAt = 0;
   };
 
-  // Debounced face-readiness. Admission is instant (the faceFit gate is itself
+  // Debounced face fit. Admission is instant (the faceFit gate is itself
   // a geometric sanity check, no need to delay letting the user in), ejection
   // requires the violation to persist ejectionDebounceMs before flipping the
   // state. Absorbs detector-box jitter and momentary occlusions without
