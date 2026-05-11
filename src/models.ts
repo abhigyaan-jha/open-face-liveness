@@ -1,7 +1,7 @@
 import type { RuntimeVerificationCheck } from './config.js';
 import type { FaceDetectionResult, FaceMeshResult, Rect, SpoofFrameResult } from './result.js';
 
-export type ModelCapability = 'detector' | 'light' | 'liveness' | 'mesh' | 'spoof';
+export type ModelCapability = 'detector' | 'mesh' | 'spoof';
 
 export interface ModelSpec {
   capability: ModelCapability;

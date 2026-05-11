@@ -339,8 +339,8 @@ const getLightTestLandmarkSampleRects = (
   frameWidth: number,
   frameHeight: number,
 ): readonly Rect[] => {
-  const faceWidth = Math.max(1, detection.box.width || detection.box.width);
-  const faceHeight = Math.max(1, detection.box.height || detection.box.height);
+  const faceWidth = Math.max(1, detection.box.width);
+  const faceHeight = Math.max(1, detection.box.height);
 
   return LIGHT_TEST_SKIN_SAMPLE_REGIONS.map((region) => {
     const center = getAverageLandmarkPoint(landmarks, region.landmarks);
@@ -1161,8 +1161,6 @@ export const summarizeLightTestSequence = (
     steps: comparisons,
   };
 };
-
-export const sampleLightTestImageData = (): LightTestSample => createEmptySample();
 
 export const createLightPipeline = ({
   onIlluminationChange,

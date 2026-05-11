@@ -5,7 +5,6 @@ export {
   getLightTestSampleRects,
   getPearsonCorrelation,
   getRgbChromaticity,
-  sampleLightTestImageData,
   summarizeLightTestSequence,
 } from './pipeline.js';
 export {

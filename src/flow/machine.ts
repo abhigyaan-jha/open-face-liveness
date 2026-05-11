@@ -541,10 +541,8 @@ export const createVerificationSessionMachine = (
       canStop: ({ context }: MachineContextArgs) => context.stage !== 'idle' && context.stage !== 'cancelled',
       hasLight: ({ context }: MachineContextArgs) => context.checks.includes('light'),
       hasLiveness: ({ context }: MachineContextArgs) => context.checks.includes('liveness'),
-      hasNoLiveness: ({ context }: MachineContextArgs) => !context.checks.includes('liveness'),
       hasNoPostFaceChallenge: ({ context }: MachineContextArgs) =>
         !context.checks.includes('liveness') && !context.checks.includes('light'),
-      isFaceOnly: ({ context }: MachineContextArgs) => context.checks.length === 1 && context.checks[0] === 'face',
     },
     types: {
       context: {} as VerificationMachineResourceContext,

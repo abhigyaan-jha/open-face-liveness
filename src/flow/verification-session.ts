@@ -38,22 +38,18 @@ import type {
   SpoofSummaryResult,
   VerificationResult,
 } from '../result.js';
+import { getFaceComparisonBox, getFaceGuideRect } from '../face/geometry.js';
+import { getAnchorDrift, getAnchorPosition, isAnchorStable } from '../face/stability.js';
+import { validateFaceFit } from '../face/fit.js';
+import { createLightPipeline, type LightPipeline } from '../light/pipeline.js';
 import {
-  createLightPipeline,
   createLivenessChallengeController,
   extractLivenessChallengeMetrics,
-  getAnchorDrift,
-  getAnchorPosition,
-  getFaceComparisonBox,
-  getFaceGuideRect,
-  isAnchorStable,
-  loadPhaseOneRuntime,
-  summarizeSpoofSamples,
-  validateFaceFit,
   type LivenessChallengeController,
-  type LightPipeline,
-  type PhaseOneRuntimeBundle,
-} from '../runtime.js';
+} from '../liveness/challenge.js';
+import { loadPhaseOneRuntime } from '../models/loader.js';
+import type { PhaseOneRuntimeBundle } from '../models.js';
+import { summarizeSpoofSamples } from '../spoof/pipeline.js';
 import { createActor, fromCallback, fromPromise, type AnyEventObject } from 'xstate';
 import { requestCamera, type CameraHandle } from '../capture/camera.js';
 import { createFrameLoop } from '../capture/frame-loop.js';
@@ -311,7 +307,6 @@ const createAnalyzeFaceActor = () =>
     const livenessToLightDelayMs = hasLight ? Math.max(0, liveness.celebrationDurationMs) : 0;
     let livenessStarted = false;
     let stableStartedAt = 0;
-    let stopped = false;
     const spoofSamples: SpoofFrameResult[] = [];
     let skippedSpoofSamples = 0;
     let spoofSummary: SpoofSummaryResult | null = hasSpoof
@@ -863,11 +858,9 @@ const createAnalyzeFaceActor = () =>
     loop.start();
 
     return () => {
-      stopped = true;
       loop.stop();
       illumination.destroy();
       void lightPipeline?.destroy();
-      void stopped;
     };
   });
 

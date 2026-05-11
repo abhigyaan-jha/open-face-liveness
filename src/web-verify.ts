@@ -76,9 +76,14 @@ export class WebVerify {
 
   async load(): Promise<ModelManifest> {
     this.state = 'loading';
-    this.manifest = await loadModelManifest(this.config.models.manifestUrl);
-    this.state = 'ready';
-    return this.manifest;
+    try {
+      this.manifest = await loadModelManifest(this.config.models.manifestUrl);
+      this.state = 'ready';
+      return this.manifest;
+    } catch (error) {
+      this.state = 'error';
+      throw error;
+    }
   }
 
   createSession(video: HTMLVideoElement): VerificationSession {
@@ -147,7 +152,7 @@ export class WebVerify {
   }
 
   async dispose(): Promise<void> {
-    this.activeSession?.destroy();
+    await this.activeSession?.destroy();
     this.activeSession = null;
     this.manifest = null;
     this.result = null;

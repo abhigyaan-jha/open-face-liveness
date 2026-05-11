@@ -14,13 +14,11 @@ import {
   createWebVerifyClient,
   isVerificationError,
   type CheckConfig,
-  type FrameSize,
-  type LivenessChallengeDirection,
-  type Rect,
   type VerificationResult,
   type VerificationSession,
   type WebVerificationSnapshot,
 } from '../../../src/index.js';
+import type { FrameSize, LivenessChallengeDirection, Rect } from '../../../src/result.js';
 import { createFrameToDisplayMapper } from '../../../src/capture/geometry.js';
 import { mountDiagnosticsOverlay } from '../../../src/draw/index.js';
 

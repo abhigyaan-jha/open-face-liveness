@@ -24,7 +24,10 @@ export type {
   WebVerifyClient,
   WebVerifyStartOptions,
 } from './web-verify.js';
-export * from './runtime.js';
+export { createLightSequence } from './light/sequence.js';
+export type { CreateLightSequenceOptions } from './light/sequence.js';
+export { createLivenessSequence } from './liveness/sequence.js';
+export type { CreateLivenessSequenceOptions } from './liveness/sequence.js';
 export {
   createVerificationSession,
   resolveDebugOptions,

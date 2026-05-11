@@ -154,7 +154,6 @@ export interface CheckConfig {
 }
 
 export interface ModelConfig {
-  basePath?: string;
   manifestUrl: string;
 }
 
@@ -187,7 +186,6 @@ export const defaultConfig: WebVerifyConfig = {
     timings: false,
   },
   models: {
-    basePath: '/models/',
     manifestUrl: '/models/manifest.json',
   },
 };

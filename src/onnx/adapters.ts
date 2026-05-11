@@ -150,18 +150,38 @@ const releaseSession = async (session: ort.InferenceSession) => {
   await session.release?.();
 };
 
+const validateSession = async <T>(
+  session: ort.InferenceSession,
+  validate: () => T,
+): Promise<T> => {
+  try {
+    return validate();
+  } catch (error) {
+    try {
+      await releaseSession(session);
+    } catch {
+      // Preserve the adapter validation error if cleanup itself fails.
+    }
+    throw error;
+  }
+};
+
 export const createOnnxDetectorAdapter = async (model: ResolvedModelSpec): Promise<DetectorAdapter> => {
   const session = await createSession(model.url);
-  const inputName = session.inputNames[0];
-  const outputNames = [...session.outputNames];
+  const { inputName, outputNames } = await validateSession(session, () => {
+    const inputName = session.inputNames[0];
+    const outputNames = [...session.outputNames];
 
-  if (!inputName) {
-    throw new VerificationError(
-      'models.adapter_invalid',
-      `Detector model '${model.id}' is missing an input.`,
-      { area: 'models' },
-    );
-  }
+    if (!inputName) {
+      throw new VerificationError(
+        'models.adapter_invalid',
+        `Detector model '${model.id}' is missing an input.`,
+        { area: 'models' },
+      );
+    }
+
+    return { inputName, outputNames };
+  });
 
   return {
     async dispose() {
@@ -229,7 +249,7 @@ const getMeshIo = (session: ort.InferenceSession) => {
 
 export const createOnnxMeshAdapter = async (model: ResolvedModelSpec): Promise<MeshAdapter> => {
   const session = await createSession(model.url);
-  const io = getMeshIo(session);
+  const io = await validateSession(session, () => getMeshIo(session));
 
   return {
     async dispose() {
@@ -277,17 +297,21 @@ export const createOnnxMeshAdapter = async (model: ResolvedModelSpec): Promise<M
 
 export const createOnnxSpoofAdapter = async (model: ResolvedModelSpec): Promise<SpoofAdapter> => {
   const session = await createSession(model.url);
-  const inputName = session.inputNames[0];
-  const outputName = session.outputNames[0];
-  const outputNames = [...session.outputNames];
+  const { inputName, outputName, outputNames } = await validateSession(session, () => {
+    const inputName = session.inputNames[0];
+    const outputName = session.outputNames[0];
+    const outputNames = [...session.outputNames];
 
-  if (!inputName || !outputName) {
-    throw new VerificationError(
-      'models.adapter_invalid',
-      `Spoof model '${model.id}' is missing an input or output.`,
-      { area: 'models' },
-    );
-  }
+    if (!inputName || !outputName) {
+      throw new VerificationError(
+        'models.adapter_invalid',
+        `Spoof model '${model.id}' is missing an input or output.`,
+        { area: 'models' },
+      );
+    }
+
+    return { inputName, outputName, outputNames };
+  });
 
   return {
     async dispose() {

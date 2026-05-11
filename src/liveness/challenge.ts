@@ -125,7 +125,7 @@ export const DEFAULT_LIVENESS_OPTIONS: ResolvedLivenessChallengeOptions = {
   celebrationDurationMs: 800,
   challenges: [...DEFAULT_LIVENESS_CHALLENGES],
   challengeMouthOpenRatio: 0.35,
-  challengePitchLimit: 0.4,
+  challengePitchLimit: 0.36,
   challengeYawLimit: 0.35,
   ejectionDebounceMs: 120,
   mouthDwellMs: 200,

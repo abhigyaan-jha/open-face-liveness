@@ -30,20 +30,28 @@ export const requestCamera = async ({ face, video }: RequestCameraOptions): Prom
     },
   });
 
-  const streamInfo = await applyDefaultCameraZoom(stream, face);
-  video.srcObject = stream;
-  await waitForVideoMetadata(video);
-  await video.play();
+  try {
+    const streamInfo = await applyDefaultCameraZoom(stream, face);
+    video.srcObject = stream;
+    await waitForVideoMetadata(video);
+    await video.play();
 
-  return {
-    stop() {
-      stopMediaStream(stream);
-      if (video.srcObject === stream) {
-        video.srcObject = null;
-      }
-    },
-    stream,
-    streamInfo,
-    video,
-  };
+    return {
+      stop() {
+        stopMediaStream(stream);
+        if (video.srcObject === stream) {
+          video.srcObject = null;
+        }
+      },
+      stream,
+      streamInfo,
+      video,
+    };
+  } catch (error) {
+    stopMediaStream(stream);
+    if (video.srcObject === stream) {
+      video.srcObject = null;
+    }
+    throw error;
+  }
 };

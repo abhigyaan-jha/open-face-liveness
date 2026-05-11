@@ -1,7 +1,7 @@
 import type { ModelCapability, ModelManifest, ModelSpec, ResolvedModelSpec } from '../models.js';
 import { VerificationError } from '../errors.js';
 
-const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'liveness', 'spoof', 'light'];
+const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'spoof'];
 
 const isModelCapability = (value: unknown): value is ModelCapability =>
   typeof value === 'string' && MODEL_CAPABILITIES.includes(value as ModelCapability);
