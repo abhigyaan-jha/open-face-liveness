@@ -41,6 +41,10 @@
       "types": "./dist/light/index.d.ts",
       "import": "./dist/light/index.js"
     },
+    "./liveness": {
+      "types": "./dist/liveness/index.d.ts",
+      "import": "./dist/liveness/index.js"
+    },
     "./models": {
       "types": "./dist/models.d.ts",
       "import": "./dist/models.js"
@@ -60,7 +64,6 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -76,4 +79,3 @@
     "browser"
   ]
 }
-

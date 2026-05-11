@@ -19,5 +19,6 @@ export type {
 } from './result.js';
 export { loadModelManifest, parseModelManifest } from './models.js';
 export type { ModelCapability, ModelManifest, ModelSpec } from './models.js';
+export { defaultLivenessChallengeTypes, runLivenessCheck } from './liveness/index.js';
+export type { LivenessChallengeType, LivenessCheckOptions } from './liveness/index.js';
 export { WebVerify } from './web-verify.js';
-

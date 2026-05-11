@@ -13,6 +13,7 @@ src/result.ts      shared result types
 src/models.ts      model manifest helpers
 src/face/          face detection, mesh, and readiness modules
 src/flow/          verification state machine/session flow
+src/liveness/      active challenge checks and liveness scoring
 src/light/         light response checks
 src/spoof/         presentation-attack signal checks
 src/onnx/          ONNX runtime helpers
@@ -43,4 +44,3 @@ bun run typecheck
 bun test
 bun run build
 ```
-
