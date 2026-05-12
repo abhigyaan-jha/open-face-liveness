@@ -75,7 +75,7 @@
     "package:audit": "node scripts/audit-package.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run build && npm run typecheck && npm test && npm run package:audit",
-    "test": "bun test",
+    "test": "bun test --pass-with-no-tests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,19 +1,14 @@
 {
-  "name": "@opencv.js/wasm",
-  "description": "opencv.js wasm",
+  "name": "web-verify-opencv-vendor",
+  "private": true,
+  "description": "Vendored OpenCV.js 4.4.0 WebAssembly assets for web-verify light checks.",
   "version": "4.4.0",
-  "author": {
-    "name": "morozovsk",
-    "url": "https://github.com/morozovsk"
-  },
-  "homepage": "https://github.com/opencv-js",
+  "homepage": "https://opencv.org",
   "repository": {
     "type": "git",
-    "url": "https://github.com/opencv-js/wasm.git"
+    "url": "https://github.com/opencv/opencv.git"
   },
-  "keywords": ["opencv", "opencvjs", "opencv.js", "utils", "dev", "debug", "error", "exception"],
-  "license": "MIT",
+  "license": "BSD-3-Clause",
   "main": "opencv.js",
-  "files": ["opencv.js", "index.d.ts", "types", "opencv.wasm"],
-  "typings": "./index.d.ts"
+  "files": ["opencv.js", "opencv_js.wasm", "opencv-worker.js"]
 }

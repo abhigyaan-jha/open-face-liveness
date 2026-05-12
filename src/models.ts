@@ -127,16 +127,10 @@ export interface LoadModelRuntimeOptions {
   models: VerificationModelsOptions;
 }
 
-/** @deprecated Use ModelRuntimeBundle instead. */
-export type PhaseOneRuntimeBundle = ModelRuntimeBundle;
-
-/** @deprecated Use LoadModelRuntimeOptions instead. */
-export type LoadPhaseOneRuntimeOptions = LoadModelRuntimeOptions;
-
 export {
   loadModelManifest,
   parseModelManifest,
   requireModelCapability,
   resolveModelSpecs,
 } from './models/manifest.js';
-export { loadModelRuntime, loadPhaseOneRuntime } from './models/loader.js';
+export { loadModelRuntime } from './models/loader.js';

@@ -86,7 +86,18 @@ interface PendingRuntimeLoad {
   capabilities: ModelCapability[];
   key: string;
   promise: Promise<LoadedRuntime>;
+  sequence: number;
 }
+
+class RuntimeLoadAbortedError extends Error {
+  constructor(cause?: unknown) {
+    super('Runtime load was superseded or cancelled.', { cause });
+    this.name = 'RuntimeLoadAbortedError';
+  }
+}
+
+const isRuntimeLoadAbortedError = (error: unknown): error is RuntimeLoadAbortedError =>
+  error instanceof RuntimeLoadAbortedError;
 
 const resolveRuntimeCapabilities = (checks: readonly VerificationCheck[]): ModelCapability[] =>
   checks.includes('spoof')
@@ -125,6 +136,7 @@ export class WebVerify {
   private runtime: LoadedRuntime | null = null;
   private readonly runtimeLeases = new Map<ModelRuntimeBundle, number>();
   private runtimeLoad: PendingRuntimeLoad | null = null;
+  private runtimeLoadSequence = 0;
   private readonly retiredRuntimes = new Set<ModelRuntimeBundle>();
   result: VerificationResult | null = null;
   state: 'idle' | 'loading' | 'ready' | 'running' | 'error' = 'idle';
@@ -267,35 +279,66 @@ export class WebVerify {
       return this.runtimeLoad.promise;
     }
 
-    const pending: PendingRuntimeLoad = {
+    const sequence = this.runtimeLoadSequence + 1;
+    this.runtimeLoadSequence = sequence;
+
+    let pending!: PendingRuntimeLoad;
+    const isPendingCurrent = () =>
+      this.runtimeLoad === pending && this.runtimeLoadSequence === sequence;
+    const abortLoadedRuntime = async (
+      runtime: ModelRuntimeBundle,
+      cause?: unknown,
+    ): Promise<LoadedRuntime> => {
+      await runtime.destroy();
+      if (this.runtime && this.isRuntimeCompatible(this.runtime, request)) {
+        return this.runtime;
+      }
+
+      throw new RuntimeLoadAbortedError(cause);
+    };
+
+    const promise = Promise.resolve().then(() => loadModelRuntime({
+      checks: request.checks,
+      models: request.models,
+    })).then(async (runtime) => {
+      const loaded = {
+        capabilities: request.capabilities,
+        key: request.key,
+        manifest: {
+          ...runtime.manifest,
+          models: runtime.models,
+        },
+        runtime,
+      };
+
+      if (!isPendingCurrent()) {
+        return abortLoadedRuntime(runtime);
+      }
+
+      if (this.runtime && this.isRuntimeCompatible(this.runtime, request)) {
+        await runtime.destroy();
+        return this.runtime;
+      }
+
+      await this.adoptRuntime(loaded);
+      return loaded;
+    }, (error) => {
+      if (!isPendingCurrent()) {
+        throw new RuntimeLoadAbortedError(error);
+      }
+
+      throw error;
+    }).finally(() => {
+      if (this.runtimeLoad === pending) {
+        this.runtimeLoad = null;
+      }
+    });
+
+    pending = {
       capabilities: request.capabilities,
       key: request.key,
-      promise: loadModelRuntime({
-        checks: request.checks,
-        models: request.models,
-      }).then(async (runtime) => {
-        const loaded = {
-          capabilities: request.capabilities,
-          key: request.key,
-          manifest: {
-            ...runtime.manifest,
-            models: runtime.models,
-          },
-          runtime,
-        };
-
-        if (this.runtime && this.isRuntimeCompatible(this.runtime, request)) {
-          await runtime.destroy();
-          return this.runtime;
-        }
-
-        await this.adoptRuntime(loaded);
-        return loaded;
-      }).finally(() => {
-        if (this.runtimeLoad === pending) {
-          this.runtimeLoad = null;
-        }
-      }),
+      promise,
+      sequence,
     };
 
     this.runtimeLoad = pending;
@@ -309,7 +352,9 @@ export class WebVerify {
       this.state = 'ready';
       return loaded.manifest;
     } catch (error) {
-      this.state = 'error';
+      if (!isRuntimeLoadAbortedError(error)) {
+        this.state = 'error';
+      }
       throw error;
     }
   }
@@ -345,7 +390,9 @@ export class WebVerify {
     try {
       loaded = await this.ensureRuntimeLoaded(request);
     } catch (error) {
-      this.state = 'error';
+      if (!isRuntimeLoadAbortedError(error)) {
+        this.state = 'error';
+      }
       throw error;
     }
 
@@ -386,6 +433,8 @@ export class WebVerify {
   }
 
   async dispose(): Promise<void> {
+    this.runtimeLoadSequence += 1;
+    this.runtimeLoad = null;
     await this.activeSession?.destroy();
     const currentRuntime = this.runtime?.runtime;
     const runtimes = new Set([
@@ -395,7 +444,6 @@ export class WebVerify {
     this.activeSession = null;
     this.manifest = null;
     this.runtime = null;
-    this.runtimeLoad = null;
     this.runtimeLeases.clear();
     this.retiredRuntimes.clear();
     this.result = null;

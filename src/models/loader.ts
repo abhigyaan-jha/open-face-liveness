@@ -25,6 +25,12 @@ const disposeSpoofAdapters = async (adapters: readonly SpoofAdapter[]): Promise<
   await Promise.all(adapters.map((adapter) => adapter.dispose()));
 };
 
+const disposeCreatedAdapters = async (
+  adapters: ReadonlyArray<{ dispose(): Promise<void> }>,
+): Promise<void> => {
+  await Promise.allSettled(adapters.map((adapter) => adapter.dispose()));
+};
+
 export const loadModelRuntime = async (
   options: LoadModelRuntimeOptions,
 ): Promise<ModelRuntimeBundle> => {
@@ -37,10 +43,26 @@ export const loadModelRuntime = async (
   const detectorModel = requireModelCapability(resolvedModels, 'detector');
   const meshModel = requireModelCapability(resolvedModels, 'mesh');
 
-  const [detectorAdapter, meshAdapter] = await Promise.all([
+  const [detectorAdapterResult, meshAdapterResult] = await Promise.allSettled([
     createOnnxDetectorAdapter(detectorModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
     createOnnxMeshAdapter(meshModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
   ]);
+
+  if (detectorAdapterResult.status === 'rejected') {
+    if (meshAdapterResult.status === 'fulfilled') {
+      await disposeCreatedAdapters([meshAdapterResult.value]);
+    }
+
+    throw detectorAdapterResult.reason;
+  }
+
+  if (meshAdapterResult.status === 'rejected') {
+    await disposeCreatedAdapters([detectorAdapterResult.value]);
+    throw meshAdapterResult.reason;
+  }
+
+  const detectorAdapter = detectorAdapterResult.value;
+  const meshAdapter = meshAdapterResult.value;
   const shouldLoadSpoof = Boolean(options.checks?.includes('spoof'));
 
   const detector = createDetectorPipeline(detectorAdapter);

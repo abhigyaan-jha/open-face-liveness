@@ -138,18 +138,3 @@ export const toVerificationError = (
     recoverable: fallback.recoverable,
   });
 };
-
-export class VerificationRuntimeError extends VerificationError {
-  constructor(detail: VerificationErrorDetail, options?: { cause?: unknown }) {
-    super(detail.code, detail.message, {
-      area: detail.area,
-      cause: options?.cause,
-      detail,
-      recoverable: detail.recoverable,
-    });
-    this.name = 'VerificationRuntimeError';
-  }
-}
-
-export const isVerificationRuntimeError = (error: unknown): error is VerificationRuntimeError =>
-  error instanceof VerificationRuntimeError;

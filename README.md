@@ -1,19 +1,24 @@
 # Web Verify Library
 
+[![Package version](https://img.shields.io/github/package-json/v/abhigyaan-jha/web-verify?label=package)](https://github.com/abhigyaan-jha/web-verify/blob/main/package.json)
+[![CI](https://github.com/abhigyaan-jha/web-verify/actions/workflows/ci.yml/badge.svg)](https://github.com/abhigyaan-jha/web-verify/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/abhigyaan-jha/web-verify)](https://github.com/abhigyaan-jha/web-verify/commits/main)
+[![License](https://img.shields.io/github/license/abhigyaan-jha/web-verify)](LICENSE)
+
 Browser face readiness, movement liveness, screen light response, spoof scoring,
 ONNX model loading, and local verification flow orchestration.
 
-`web-verify` is a small TypeScript browser library. It exposes a simple client API
-for application code and keeps the orchestration state machine behind a session
-facade. Lower level modules are available through deep entrypoints for apps that
-need direct access to face, liveness, light, spoof, ONNX, capture, draw, or runtime
-helpers.
+`web-verify` is a small TypeScript browser library and OSS verification toolkit.
+It exposes a simple client API for application code, a managed session facade for
+verification flows, and lower-level modules for apps that need direct access to
+face, liveness, light, spoof, ONNX, capture, draw, runtime, or actor
+orchestration primitives.
 
 ## Highlights
 
 - Browser-first `HTMLVideoElement` processing
 - Simple unified client API with `createWebVerifyClient()`
-- Internal flow states for camera, model loading, face readiness, liveness, light, completion, failure, and cancellation
+- XState-backed managed flow for camera, model loading, face readiness, liveness, light, completion, failure, and cancellation
 - Deep modules for focused use: `face`, `liveness`, `light`, `spoof`, `onnx`, `capture`, `draw`, `models`, `runtime`
 - ONNX Runtime Web adapters and model manifest loading
 - Sequence helpers for randomized or repeated liveness and light challenges
@@ -186,13 +191,14 @@ sample counts, model count, real frame ratio, and median scores.
 
 ## Deep Entrypoints
 
-The root package exports the client, configuration, errors, runtime helpers, and
-shared result types. Focused modules are also available:
+The root package exports the app-facing client, configuration, errors, sequence
+helpers, and shared result types. Focused modules are also available for custom
+demos, instrumentation, direct runtime use, and advanced orchestration:
 
 - `web-verify/capture`: camera, media, frame, and geometry helpers
 - `web-verify/draw`: diagnostics overlay drawing
 - `web-verify/face`: detector, mesh, fit, guide geometry, and stability helpers
-- `web-verify/flow`: verification session and flow utilities
+- `web-verify/flow`: managed verification session plus advanced XState machine utilities for custom actor orchestration and testing
 - `web-verify/light`: light response pipeline and sequence helpers
 - `web-verify/liveness`: movement challenge controller and sequence helpers
 - `web-verify/models`: manifest parsing, model resolution, and runtime loading
@@ -201,7 +207,9 @@ shared result types. Focused modules are also available:
 - `web-verify/spoof`: spoof score fusion and summary helpers
 
 Application developers should normally start with `createWebVerifyClient()`.
-Deep modules are for custom demos, instrumentation, and direct runtime use.
+Use `createVerificationSession()` when you want direct control over a single
+verification run. Deep modules are intentional toolkit surfaces for custom demos,
+instrumentation, direct runtime use, and advanced integrations.
 
 ## Demos
 
@@ -254,7 +262,7 @@ src/models.ts      model manifest, adapters, and runtime contracts
 src/capture/       camera, media, frame, and display geometry helpers
 src/draw/          diagnostics overlay drawing
 src/face/          detector, mesh, fit, stability, and guide geometry
-src/flow/          internal state machine and verification session
+src/flow/          XState-backed managed session and advanced machine utilities
 src/light/         light response pipeline and sequence helpers
 src/liveness/      movement challenge controller and sequence helpers
 src/onnx/          ONNX Runtime Web adapters
