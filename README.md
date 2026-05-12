@@ -213,6 +213,7 @@ instrumentation, direct runtime use, and advanced integrations.
 
 ## Demos
 
+![Web Verify browser demo](./demo_real.gif)
 
 Run the local browser demo:
 
