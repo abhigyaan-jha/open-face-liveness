@@ -123,7 +123,9 @@ export class WebVerify {
   config: WebVerifyConfig;
   manifest: ModelManifest | null = null;
   private runtime: LoadedRuntime | null = null;
+  private readonly runtimeLeases = new Map<ModelRuntimeBundle, number>();
   private runtimeLoad: PendingRuntimeLoad | null = null;
+  private readonly retiredRuntimes = new Set<ModelRuntimeBundle>();
   result: VerificationResult | null = null;
   state: 'idle' | 'loading' | 'ready' | 'running' | 'error' = 'idle';
 
@@ -159,6 +161,103 @@ export class WebVerify {
     return runtime.key === request.key && hasRuntimeCapabilities(runtime.capabilities, request.capabilities);
   }
 
+  private retainRuntime(runtime: ModelRuntimeBundle): void {
+    this.runtimeLeases.set(runtime, (this.runtimeLeases.get(runtime) ?? 0) + 1);
+  }
+
+  private async releaseRuntime(runtime: ModelRuntimeBundle): Promise<void> {
+    const leases = this.runtimeLeases.get(runtime);
+    if (!leases) {
+      return;
+    }
+
+    if (leases > 1) {
+      this.runtimeLeases.set(runtime, leases - 1);
+      return;
+    }
+
+    this.runtimeLeases.delete(runtime);
+    await this.destroyUnleasedRetiredRuntimes();
+  }
+
+  private async destroyUnleasedRetiredRuntimes(): Promise<void> {
+    const disposableRuntimes = [...this.retiredRuntimes]
+      .filter((runtime) => !this.runtimeLeases.has(runtime));
+
+    for (const runtime of disposableRuntimes) {
+      this.retiredRuntimes.delete(runtime);
+    }
+
+    await Promise.all(disposableRuntimes.map((runtime) => runtime.destroy()));
+  }
+
+  private async retireRuntime(runtime: ModelRuntimeBundle): Promise<void> {
+    if (this.runtime?.runtime === runtime) {
+      return;
+    }
+
+    if (this.runtimeLeases.has(runtime)) {
+      this.retiredRuntimes.add(runtime);
+      return;
+    }
+
+    await runtime.destroy();
+  }
+
+  private async adoptRuntime(loaded: LoadedRuntime): Promise<void> {
+    const previousRuntime = this.runtime?.runtime;
+
+    this.runtime = loaded;
+    this.manifest = loaded.manifest;
+
+    if (previousRuntime && previousRuntime !== loaded.runtime) {
+      await this.retireRuntime(previousRuntime);
+    }
+  }
+
+  private createManagedSession(
+    options: Parameters<typeof createVerificationSession>[0],
+    runtime?: ModelRuntimeBundle,
+  ): VerificationSession {
+    const session = createVerificationSession(options);
+    if (!runtime) {
+      return session;
+    }
+
+    let released = false;
+    this.retainRuntime(runtime);
+
+    const release = async () => {
+      if (released) {
+        return;
+      }
+
+      released = true;
+      await this.releaseRuntime(runtime);
+    };
+
+    return {
+      async destroy() {
+        try {
+          await session.destroy();
+        } finally {
+          await release();
+        }
+      },
+      getSnapshot: () => session.getSnapshot(),
+      reset: () => session.reset(),
+      async start() {
+        try {
+          return await session.start();
+        } finally {
+          await release();
+        }
+      },
+      stop: () => session.stop(),
+      subscribe: (listener) => session.subscribe(listener),
+    };
+  }
+
   private async ensureRuntimeLoaded(request: RuntimeRequest): Promise<LoadedRuntime> {
     if (this.runtime && this.isRuntimeCompatible(this.runtime, request)) {
       return this.runtime;
@@ -174,7 +273,7 @@ export class WebVerify {
       promise: loadModelRuntime({
         checks: request.checks,
         models: request.models,
-      }).then((runtime) => {
+      }).then(async (runtime) => {
         const loaded = {
           capabilities: request.capabilities,
           key: request.key,
@@ -185,15 +284,12 @@ export class WebVerify {
           runtime,
         };
 
-        if (
-          !this.runtime ||
-          this.runtime.key !== loaded.key ||
-          hasRuntimeCapabilities(loaded.capabilities, this.runtime.capabilities)
-        ) {
-          this.runtime = loaded;
-          this.manifest = loaded.manifest;
+        if (this.runtime && this.isRuntimeCompatible(this.runtime, request)) {
+          await runtime.destroy();
+          return this.runtime;
         }
 
+        await this.adoptRuntime(loaded);
         return loaded;
       }).finally(() => {
         if (this.runtimeLoad === pending) {
@@ -223,7 +319,7 @@ export class WebVerify {
     const runtime = this.runtime && this.isRuntimeCompatible(this.runtime, request)
       ? this.runtime.runtime
       : undefined;
-    const session = createVerificationSession({
+    const session = this.createManagedSession({
       checks: this.getEnabledChecks(),
       runtime,
       models: {
@@ -254,7 +350,7 @@ export class WebVerify {
     }
 
     this.state = 'running';
-    const session = createVerificationSession({
+    const session = this.createManagedSession({
       checks: request.checks,
       debug: options.debug,
       face: options.face,
@@ -263,7 +359,7 @@ export class WebVerify {
       models: request.models,
       runtime: loaded.runtime,
       video: options.video,
-    });
+    }, loaded.runtime);
     const unsubscribe = options.onSnapshot ? session.subscribe(options.onSnapshot) : null;
     this.activeSession = session;
 
@@ -291,13 +387,20 @@ export class WebVerify {
 
   async dispose(): Promise<void> {
     await this.activeSession?.destroy();
-    await this.runtime?.runtime.destroy();
+    const currentRuntime = this.runtime?.runtime;
+    const runtimes = new Set([
+      ...(currentRuntime ? [currentRuntime] : []),
+      ...this.retiredRuntimes,
+    ]);
     this.activeSession = null;
     this.manifest = null;
     this.runtime = null;
     this.runtimeLoad = null;
+    this.runtimeLeases.clear();
+    this.retiredRuntimes.clear();
     this.result = null;
     this.state = 'idle';
+    await Promise.all([...runtimes].map((runtime) => runtime.destroy()));
   }
 }
 

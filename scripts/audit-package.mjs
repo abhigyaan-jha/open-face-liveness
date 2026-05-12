@@ -79,8 +79,14 @@ if (absoluteModelUrls.length) {
 }
 
 const onnxDependency = packageJson.dependencies?.['onnxruntime-web'];
-const onnxVersion = onnxDependency?.match(/\d+\.\d+\.\d+/)?.[0];
+const onnxVersion = typeof onnxDependency === 'string' && /^\d+\.\d+\.\d+$/.test(onnxDependency)
+  ? onnxDependency
+  : null;
 const onnxAdapterSource = fs.readFileSync(path.join(root, 'src/onnx/adapters.ts'), 'utf8');
+if (!onnxVersion) {
+  errors.push('onnxruntime-web must be pinned to an exact version because its JS and wasm assets are a matched set.');
+}
+
 if (!onnxVersion || !onnxAdapterSource.includes(`onnxruntime-web@${onnxVersion}/dist/`)) {
   errors.push('DEFAULT_ONNX_WASM_BASE_URL must stay pinned to the onnxruntime-web dependency version.');
 }

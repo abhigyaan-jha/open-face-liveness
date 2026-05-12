@@ -5,7 +5,7 @@
     "": {
       "name": "web-verify",
       "dependencies": {
-        "onnxruntime-web": "^1.26.0",
+        "onnxruntime-web": "1.26.0",
         "xstate": "^5.31.1",
       },
       "devDependencies": {
