@@ -1,4 +1,10 @@
-import type { ModelCapability, ModelManifest, ModelSpec, ResolvedModelSpec } from '../models.js';
+import type {
+  ModelCapability,
+  ModelManifest,
+  ModelOverrides,
+  ModelSpec,
+  ResolvedModelSpec,
+} from '../models.js';
 import { VerificationError } from '../errors.js';
 
 const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'spoof'];
@@ -73,11 +79,20 @@ export const parseModelManifest = (raw: unknown): ModelManifest => {
 };
 
 export const loadModelManifest = async (manifestUrl: string): Promise<ModelManifest> => {
-  const response = await fetch(manifestUrl, {
-    headers: {
-      accept: 'application/json',
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(manifestUrl, {
+      headers: {
+        accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    throw new VerificationError(
+      'models.manifest_load_failed',
+      `Unable to load model manifest: ${manifestUrl}`,
+      { area: 'models', cause: error },
+    );
+  }
 
   if (!response.ok) {
     throw new VerificationError(
@@ -87,7 +102,18 @@ export const loadModelManifest = async (manifestUrl: string): Promise<ModelManif
     );
   }
 
-  return parseModelManifest(await response.json());
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch (error) {
+    throw new VerificationError(
+      'models.manifest_invalid',
+      `Unable to parse model manifest: ${manifestUrl}`,
+      { area: 'models', cause: error },
+    );
+  }
+
+  return parseModelManifest(raw);
 };
 
 const hasUrlScheme = (url: string): boolean => /^[a-z][a-z\d+\-.]*:/i.test(url);
@@ -133,13 +159,40 @@ const getManifestBaseUrl = (manifestUrl?: string): string | undefined => {
 
 export const resolveModelSpecs = (
   manifest: ModelManifest,
-  overrides?: Partial<Record<ModelCapability, string>>,
+  overrides?: ModelOverrides,
   options: ResolveModelSpecOptions = {},
 ): ResolvedModelSpec[] => {
   const baseUrl = options.baseUrl ?? getManifestBaseUrl(options.manifestUrl);
+  const modelsByCapability = new Map<ModelCapability, ModelSpec[]>();
+
+  for (const model of manifest.models) {
+    modelsByCapability.set(model.capability, [
+      ...(modelsByCapability.get(model.capability) ?? []),
+      model,
+    ]);
+  }
+
+  for (const capability of MODEL_CAPABILITIES) {
+    if (typeof overrides?.[capability] !== 'string') {
+      continue;
+    }
+
+    const models = modelsByCapability.get(capability) ?? [];
+    if (models.length <= 1) {
+      continue;
+    }
+
+    throw new VerificationError(
+      'models.manifest_invalid',
+      `Model override '${capability}' matches multiple models. Use model ids instead: ${models
+        .map((model) => model.id)
+        .join(', ')}.`,
+      { area: 'models' },
+    );
+  }
 
   return manifest.models.map((model) => {
-    const url = overrides?.[model.capability] ?? model.url;
+    const url = overrides?.[model.id] ?? overrides?.[model.capability] ?? model.url;
 
     return {
       ...model,

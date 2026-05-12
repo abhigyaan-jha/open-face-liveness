@@ -6,6 +6,18 @@
   "type": "module",
   "packageManager": "bun@1.3.12",
   "license": "MIT",
+  "author": "Abhigyaan Jha",
+  "homepage": "https://github.com/abhigyaan-jha/web-verify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhigyaan-jha/web-verify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/abhigyaan-jha/web-verify/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.js",

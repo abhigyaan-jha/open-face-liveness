@@ -3,6 +3,10 @@ import type { FaceDetectionResult, FaceMeshResult, Rect, SpoofFrameResult } from
 
 export type ModelCapability = 'detector' | 'mesh' | 'spoof';
 
+export type ModelOverrides = Partial<Record<ModelCapability, string>> & {
+  [modelId: string]: string | undefined;
+};
+
 export interface ModelSpec {
   capability: ModelCapability;
   format: 'onnx';
@@ -26,7 +30,7 @@ export interface VerificationModelsOptions {
   baseUrl?: string;
   manifestUrl: string;
   onnxWasmBaseUrl?: string;
-  overrides?: Partial<Record<ModelCapability, string>>;
+  overrides?: ModelOverrides;
 }
 
 export interface DetectorRawResult {

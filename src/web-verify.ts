@@ -9,6 +9,7 @@ import {
   type WebVerifyConfig,
   type WebVerifyUserConfig,
 } from './config.js';
+import { VerificationError } from './errors.js';
 import { createVerificationSession, type VerificationSession } from './flow/verification-session.js';
 import { loadModelRuntime } from './models/loader.js';
 import type {
@@ -138,6 +139,7 @@ export class WebVerify {
   private runtimeLoad: PendingRuntimeLoad | null = null;
   private runtimeLoadSequence = 0;
   private readonly retiredRuntimes = new Set<ModelRuntimeBundle>();
+  private startInFlight = false;
   result: VerificationResult | null = null;
   state: 'idle' | 'loading' | 'ready' | 'running' | 'error' = 'idle';
 
@@ -151,12 +153,19 @@ export class WebVerify {
 
   private resolveRuntimeRequest(options: WebVerifyLoadOptions = {}): RuntimeRequest {
     const checks = resolveCheckSelection(options.checks, this.config.checks);
-    const models = {
+    const overrides = {
+      ...(this.config.models.overrides ?? {}),
+      ...(options.models?.overrides ?? {}),
+    };
+    const models: VerificationModelsOptions = {
       baseUrl: options.models?.baseUrl ?? this.config.models.baseUrl,
       manifestUrl: options.models?.manifestUrl ?? this.config.models.manifestUrl,
       onnxWasmBaseUrl: options.models?.onnxWasmBaseUrl ?? this.config.models.onnxWasmBaseUrl,
-      overrides: options.models?.overrides,
     };
+
+    if (Object.keys(overrides).length > 0) {
+      models.overrides = overrides;
+    }
 
     return {
       capabilities: resolveRuntimeCapabilities(checks),
@@ -384,41 +393,68 @@ export class WebVerify {
   }
 
   async start(options: WebVerifyStartOptions): Promise<VerificationResult> {
-    const request = this.resolveRuntimeRequest(options);
-    this.state = 'loading';
-    let loaded: LoadedRuntime;
-    try {
-      loaded = await this.ensureRuntimeLoaded(request);
-    } catch (error) {
-      if (!isRuntimeLoadAbortedError(error)) {
-        this.state = 'error';
-      }
-      throw error;
+    if (this.startInFlight) {
+      throw new VerificationError(
+        'session.invalid_state',
+        'A verification session is already running.',
+        { area: 'session', recoverable: true },
+      );
     }
 
-    this.state = 'running';
-    const session = this.createManagedSession({
-      checks: request.checks,
-      debug: options.debug,
-      face: options.face,
-      light: options.light,
-      liveness: options.liveness,
-      models: request.models,
-      runtime: loaded.runtime,
-      video: options.video,
-    }, loaded.runtime);
-    const unsubscribe = options.onSnapshot ? session.subscribe(options.onSnapshot) : null;
-    this.activeSession = session;
+    this.startInFlight = true;
+    let session: VerificationSession | null = null;
+    let unsubscribe: (() => void) | null = null;
 
     try {
-      this.result = await session.start();
-      this.state = 'ready';
-      return this.result;
-    } catch (error) {
-      this.state = 'error';
-      throw error;
+      const request = this.resolveRuntimeRequest(options);
+      this.state = 'loading';
+      let loaded: LoadedRuntime;
+      try {
+        loaded = await this.ensureRuntimeLoaded(request);
+      } catch (error) {
+        if (!isRuntimeLoadAbortedError(error)) {
+          this.state = 'error';
+        }
+        throw error;
+      }
+
+      this.state = 'running';
+      session = this.createManagedSession({
+        checks: request.checks,
+        debug: options.debug,
+        face: options.face,
+        light: options.light,
+        liveness: options.liveness,
+        models: request.models,
+        runtime: loaded.runtime,
+        video: options.video,
+      }, loaded.runtime);
+      unsubscribe = options.onSnapshot ? session.subscribe(options.onSnapshot) : null;
+      this.activeSession = session;
+
+      try {
+        this.result = await session.start();
+        this.state = 'ready';
+        return this.result;
+      } catch (error) {
+        this.state = 'error';
+        throw error;
+      }
     } finally {
-      unsubscribe?.();
+      try {
+        unsubscribe?.();
+        if (session) {
+          try {
+            await session.destroy();
+          } finally {
+            if (this.activeSession === session) {
+              this.activeSession = null;
+            }
+          }
+        }
+      } finally {
+        this.startInFlight = false;
+      }
     }
   }
 

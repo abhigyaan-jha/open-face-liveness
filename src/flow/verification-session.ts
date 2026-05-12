@@ -139,6 +139,12 @@ const createSessionDestroyedError = (): VerificationError =>
     { area: 'session' },
   );
 
+const throwIfSessionAborted = (signal: AbortSignal): void => {
+  if (signal.aborted) {
+    throw createSessionDestroyedError();
+  }
+};
+
 const modelRuntimeDestroyPromises = new WeakMap<ModelRuntimeBundle, Promise<void>>();
 
 const destroyModelRuntime = (runtime: ModelRuntimeBundle): Promise<void> => {
@@ -262,24 +268,45 @@ const createDiagnosticsFrame = ({
 });
 
 const createRequestCameraActor = () =>
-  fromPromise<RequestCameraOutput, RequestCameraInput>(async ({ input }) => {
+  fromPromise<RequestCameraOutput, RequestCameraInput>(async ({ input, signal }) => {
     const { face, video } = input;
-    let handle: CameraHandle;
+    let handle: CameraHandle | null = null;
+    const stopResolvedHandle = () => {
+      const resolvedHandle = handle;
+      handle = null;
+      resolvedHandle?.stop();
+    };
 
     try {
+      throwIfSessionAborted(signal);
+      signal.addEventListener('abort', stopResolvedHandle, { once: true });
       handle = await requestCamera({ face, video });
-    } catch (error) {
-      throw toCameraError(error);
-    }
 
-    return {
-      handle,
-      streamInfo: handle.streamInfo,
-    };
+      if (signal.aborted) {
+        stopResolvedHandle();
+        throw createSessionDestroyedError();
+      }
+
+      return {
+        handle,
+        streamInfo: handle.streamInfo,
+      };
+    } catch (error) {
+      if (signal.aborted) {
+        stopResolvedHandle();
+        throw createSessionDestroyedError();
+      }
+
+      throw toCameraError(error);
+    } finally {
+      signal.removeEventListener('abort', stopResolvedHandle);
+    }
   });
 
 const createLoadModelsActor = (runtime?: ModelRuntimeBundle) =>
-  fromPromise<LoadModelsOutput, LoadModelsInput>(async ({ input }) => {
+  fromPromise<LoadModelsOutput, LoadModelsInput>(async ({ input, signal }) => {
+    throwIfSessionAborted(signal);
+
     if (runtime) {
       return {
         handle: runtime,
@@ -288,22 +315,43 @@ const createLoadModelsActor = (runtime?: ModelRuntimeBundle) =>
     }
 
     const { checks, models } = input;
-    let bundle: ModelRuntimeBundle;
+    let bundle: ModelRuntimeBundle | null = null;
+    const destroyResolvedBundle = () => {
+      const resolvedBundle = bundle;
+      bundle = null;
+      return resolvedBundle ? destroyModelRuntime(resolvedBundle) : Promise.resolve();
+    };
+    const destroyResolvedBundleOnAbort = () => {
+      void destroyResolvedBundle();
+    };
 
     try {
+      signal.addEventListener('abort', destroyResolvedBundleOnAbort, { once: true });
       bundle = await loadModelRuntime({ checks, models });
+
+      if (signal.aborted) {
+        await destroyResolvedBundle();
+        throw createSessionDestroyedError();
+      }
+
+      return {
+        handle: bundle,
+        models: bundle.models,
+      };
     } catch (error) {
+      if (signal.aborted) {
+        await destroyResolvedBundle();
+        throw createSessionDestroyedError();
+      }
+
       throw toVerificationError(error, {
         area: 'models',
         code: 'models.load_failed',
         message: 'Face verification could not start. Please try again.',
       });
+    } finally {
+      signal.removeEventListener('abort', destroyResolvedBundleOnAbort);
     }
-
-    return {
-      handle: bundle,
-      models: bundle.models,
-    };
   });
 
 const createAnalyzeFaceActor = () =>

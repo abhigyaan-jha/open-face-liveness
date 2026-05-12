@@ -51,7 +51,7 @@ Manifest fields:
 - `version`: manifest schema version
 - `models`: list of browser-loadable model specs
 - `id`: stable model identifier
-- `capability`: runtime capability, one of `detector`, `mesh`, `spoof`, `liveness`, or `light`
+- `capability`: runtime model capability, one of `detector`, `mesh`, or `spoof`
 - `format`: currently `onnx`
 - `required`: whether the model is required for the configured runtime
 - `url`: browser-fetchable model URL, usually relative to `models.baseUrl`
@@ -61,11 +61,11 @@ Manifest fields:
 - `detector`: face detector model used before mesh, fit, liveness, light, and spoof checks
 - `mesh`: face landmark model used for readiness, movement metrics, and diagnostics
 - `spoof`: optional presentation-attack scoring models
-- `liveness`: reserved capability for liveness-specific model assets
-- `light`: reserved capability for light-specific model assets
 
 The current default runtime requires `detector` and `mesh`. Spoof models are
 loaded when the `spoof` check is enabled.
+Liveness is implemented from face mesh movement metrics. Light response checks
+use the OpenCV worker assets in `vendor/opencv/`, not manifest model entries.
 
 ## Usage
 
@@ -121,6 +121,23 @@ const verifier = createWebVerifyClient({
 Model specs are resolved at runtime and loaded through the ONNX adapters. Custom
 models must match the input and output conventions expected by the corresponding
 adapter.
+
+Model overrides may target a model capability when only one model has that
+capability, or a specific model id. Use model ids for capabilities with multiple
+entries, such as the default spoof models:
+
+```ts
+const verifier = createWebVerifyClient({
+  models: {
+    baseUrl: '/assets/web-verify/',
+    manifestUrl: '/assets/web-verify/manifest.v1.json',
+    overrides: {
+      'silent-face-minifasnet-v2-2.7': '/assets/web-verify/spoof-v2.onnx',
+      'silent-face-minifasnet-v1se-4.0': '/assets/web-verify/spoof-v1se.onnx',
+    },
+  },
+});
+```
 
 ## Notes
 

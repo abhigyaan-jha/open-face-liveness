@@ -749,7 +749,10 @@ export const createVerificationSessionMachine = (
         },
       },
       completed: {
-        entry: stageAction('completed'),
+        entry: [
+          stageAction('completed'),
+          cleanup,
+        ],
         on: {
           START: {
             actions: [
