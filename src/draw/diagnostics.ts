@@ -1,5 +1,5 @@
 import type { VerificationSnapshot } from '../events.js';
-import type { LandmarkList, Rect } from '../result.js';
+import type { LandmarkList, Rect, SpoofFrameResult } from '../result.js';
 import { createFrameToDisplayMapper, type FrameDisplayFit, type FrameMapper } from '../capture/geometry.js';
 import type { VerificationSession } from '../flow/verification-session.js';
 
@@ -8,9 +8,13 @@ export interface DiagnosticsOverlayOptions {
   mirrored?: boolean;
 }
 
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
+
+const getCanvasPixelRatio = (): number => Math.max(1, window.devicePixelRatio || 1);
+
 const resizeCanvas = (canvas: HTMLCanvasElement) => {
   const rect = canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
+  const ratio = getCanvasPixelRatio();
   const width = Math.max(1, Math.round(rect.width * ratio));
   const height = Math.max(1, Math.round(rect.height * ratio));
 
@@ -50,6 +54,49 @@ const drawLandmarks = (
   context.restore();
 };
 
+const getSpoofScore = (spoof: SpoofFrameResult): number => {
+  switch (spoof.label) {
+    case 'real':
+      return spoof.realScore;
+    case 'paper':
+      return spoof.paperScore;
+    case 'screen':
+      return spoof.screenScore;
+  }
+};
+
+const drawSpoofGuide = (
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  spoof: SpoofFrameResult,
+) => {
+  const isReal = spoof.label === 'real';
+  const color = isReal ? 'rgba(70, 230, 160, 0.95)' : 'rgba(255, 80, 80, 0.95)';
+  const score = getSpoofScore(spoof);
+  const text = `${isReal ? 'REAL' : 'SPOOF'} ${score.toFixed(2)}`;
+  const ratio = getCanvasPixelRatio();
+  const fontSize = clamp((rect.width / ratio) * 0.13, 20, 30) * ratio;
+  const paddingX = 12 * ratio;
+  const paddingY = 8 * ratio;
+
+  context.save();
+  context.font = `700 ${fontSize}px monospace`;
+  const textWidth = context.measureText(text).width;
+  const labelWidth = textWidth + paddingX * 2;
+  const labelHeight = fontSize + paddingY * 2;
+  const inset = 8 * ratio;
+  const maxX = Math.max(inset, context.canvas.width - labelWidth - inset);
+  const x = clamp(rect.x, inset, maxX);
+  const y = Math.max(inset, rect.y - labelHeight - 10 * ratio);
+
+  context.fillStyle = 'rgba(0, 0, 0, 0.72)';
+  context.fillRect(x, y, labelWidth, labelHeight);
+  context.fillStyle = color;
+  context.fillRect(x, y, 6 * ratio, labelHeight);
+  context.fillText(text, x + paddingX, y + paddingY + fontSize * 0.82);
+  context.restore();
+};
+
 const drawSnapshot = (
   canvas: HTMLCanvasElement,
   context: CanvasRenderingContext2D,
@@ -72,12 +119,18 @@ const drawSnapshot = (
   );
 
   if (diagnostics.detection?.box) {
+    const detectionRect = mapper.mapRect(diagnostics.detection.box);
+
     drawRect(
       context,
-      mapper.mapRect(diagnostics.detection.box),
+      detectionRect,
       diagnostics.faceFit?.isAligned ? 'rgba(70, 230, 160, 0.95)' : 'rgba(255, 210, 80, 0.95)',
       2,
     );
+
+    if (diagnostics.spoof) {
+      drawSpoofGuide(context, detectionRect, diagnostics.spoof);
+    }
   }
 
   if (diagnostics.mesh?.landmarks) {

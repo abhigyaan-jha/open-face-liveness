@@ -21,15 +21,14 @@ import {
 import type { FrameSize, LivenessChallengeDirection, Rect } from '../../../src/result.js';
 import { createFrameToDisplayMapper } from '../../../src/capture/geometry.js';
 import { mountDiagnosticsOverlay } from '../../../src/draw/index.js';
-
-const MODEL_MANIFEST_URL = '/models/manifest.json';
-const OPENCV_ASSET_BASE_URL = '/vendor/opencv/';
+import { DEMO_ASSET_CONFIG } from './env.js';
 
 type OverlayPhase = 'detecting' | 'idle' | 'recentering' | 'stabilizing' | 'success';
 
 const verifier = createWebVerifyClient({
   models: {
-    manifestUrl: MODEL_MANIFEST_URL,
+    baseUrl: DEMO_ASSET_CONFIG.modelBaseUrl,
+    manifestUrl: DEMO_ASSET_CONFIG.modelManifestUrl,
   },
 });
 
@@ -477,14 +476,24 @@ export const App = function App() {
   }, []);
 
   const mountActiveDiagnosticsOverlay = useCallback(() => {
-    cleanupDiagnosticsOverlay();
+    const activeSession = verifier.activeSession ?? sessionRef.current;
 
-    if (!debugEnabled || !sessionRef.current || !diagnosticsOverlayRef.current) {
+    if (!debugEnabled || !activeSession || !diagnosticsOverlayRef.current) {
+      cleanupDiagnosticsOverlay();
+      if (!activeSession) {
+        sessionRef.current = null;
+      }
       return;
     }
 
+    if (sessionRef.current === activeSession && diagnosticsOverlayCleanupRef.current) {
+      return;
+    }
+
+    cleanupDiagnosticsOverlay();
+    sessionRef.current = activeSession;
     diagnosticsOverlayCleanupRef.current = mountDiagnosticsOverlay(
-      sessionRef.current,
+      activeSession,
       diagnosticsOverlayRef.current,
       {
         fit: 'cover',
@@ -494,7 +503,6 @@ export const App = function App() {
   }, [cleanupDiagnosticsOverlay, debugEnabled]);
 
   const attachActiveSession = useCallback(() => {
-    sessionRef.current = verifier.activeSession;
     mountActiveDiagnosticsOverlay();
   }, [mountActiveDiagnosticsOverlay]);
 
@@ -514,6 +522,11 @@ export const App = function App() {
       width: video.videoWidth,
     });
   };
+
+  const handleSnapshot = useCallback((nextSnapshot: WebVerificationSnapshot) => {
+    setSnapshot(nextSnapshot);
+    mountActiveDiagnosticsOverlay();
+  }, [mountActiveDiagnosticsOverlay]);
 
   const disposeSession = () => {
     cleanupDiagnosticsOverlay();
@@ -540,16 +553,17 @@ export const App = function App() {
         } satisfies CheckConfig,
         debug: debugEnabled,
         light: {
-          opencvAssetBaseUrl: OPENCV_ASSET_BASE_URL,
+          opencvAssetBaseUrl: DEMO_ASSET_CONFIG.opencvAssetBaseUrl,
           sequence: createLightSequence({ length: 4 }),
         },
         liveness: {
           challenges: createLivenessSequence({ length: 3 }),
         },
         models: {
-          manifestUrl: MODEL_MANIFEST_URL,
+          baseUrl: DEMO_ASSET_CONFIG.modelBaseUrl,
+          manifestUrl: DEMO_ASSET_CONFIG.modelManifestUrl,
         },
-        onSnapshot: setSnapshot,
+        onSnapshot: handleSnapshot,
         video: videoRef.current,
       });
       attachActiveSession();

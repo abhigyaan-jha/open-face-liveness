@@ -11,6 +11,7 @@
     "rootDir": ".",
     "strict": true,
     "target": "ES2022",
+    "types": [],
     "verbatimModuleSyntax": true
   },
   "include": ["src", "test", "demo/browser"]
