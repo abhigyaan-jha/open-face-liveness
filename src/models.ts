@@ -23,7 +23,9 @@ export interface ResolvedModelSpec extends ModelSpec {
 }
 
 export interface VerificationModelsOptions {
+  baseUrl?: string;
   manifestUrl: string;
+  onnxWasmBaseUrl?: string;
   overrides?: Partial<Record<ModelCapability, string>>;
 }
 
@@ -111,18 +113,25 @@ export interface SpoofPipeline {
   destroy(): Promise<void>;
 }
 
-export interface PhaseOneRuntimeBundle {
+export interface ModelRuntimeBundle {
   destroy(): Promise<void>;
   detector: DetectorPipeline;
+  manifest: ModelManifest;
   mesh: MeshPipeline;
   models: ResolvedModelSpec[];
   spoof: SpoofPipeline | null;
 }
 
-export interface LoadPhaseOneRuntimeOptions {
+export interface LoadModelRuntimeOptions {
   checks?: readonly RuntimeVerificationCheck[];
   models: VerificationModelsOptions;
 }
+
+/** @deprecated Use ModelRuntimeBundle instead. */
+export type PhaseOneRuntimeBundle = ModelRuntimeBundle;
+
+/** @deprecated Use LoadModelRuntimeOptions instead. */
+export type LoadPhaseOneRuntimeOptions = LoadModelRuntimeOptions;
 
 export {
   loadModelManifest,
@@ -130,4 +139,4 @@ export {
   requireModelCapability,
   resolveModelSpecs,
 } from './models/manifest.js';
-export { loadPhaseOneRuntime } from './models/loader.js';
+export { loadModelRuntime, loadPhaseOneRuntime } from './models/loader.js';

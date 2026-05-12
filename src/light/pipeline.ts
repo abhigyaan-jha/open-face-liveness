@@ -13,6 +13,7 @@ import type {
   Rect,
 } from '../result.js';
 import type { ResolvedLightTestOptions } from '../config.js';
+import { VerificationError, type VerificationErrorCode } from '../errors.js';
 import { cloneLightTestColor } from './sequence.js';
 
 export interface LightPipelineFrame {
@@ -88,7 +89,7 @@ type OpenCvWorkerStatus = 'failed' | 'loading' | 'not-loaded' | 'ready';
 
 interface OpenCvSampler {
   destroy(): void;
-  getError(): string | null;
+  getError(): VerificationError | null;
   getStatus(): OpenCvWorkerStatus;
   prepare(): Promise<void>;
   sampleRegions(regions: readonly OpenCvRegionPayload[], transfer: Transferable[]): Promise<OpenCvSampleResult>;
@@ -785,8 +786,24 @@ const getLightTestStability = ({
   };
 };
 
-const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error || 'unknown error');
+const createLightError = (
+  code: VerificationErrorCode,
+  message: string,
+  cause?: unknown,
+): VerificationError =>
+  new VerificationError(code, message, {
+    area: 'light',
+    cause,
+  });
+
+const toLightError = (
+  error: unknown,
+  code: VerificationErrorCode,
+  message: string,
+): VerificationError =>
+  error instanceof VerificationError
+    ? error
+    : createLightError(code, message, error);
 
 const ensureTrailingSlash = (value: string): string =>
   value.endsWith('/') ? value : `${value}/`;
@@ -804,7 +821,7 @@ const createOpenCvSampler = (options: ResolvedLightTestOptions): OpenCvSampler =
   const assetBaseUrl = ensureTrailingSlash(options.opencvAssetBaseUrl);
   const workerUrl = resolveLightAssetUrl(options.opencvWorkerUrl ?? `${assetBaseUrl}${DEFAULT_OPENCV_WORKER_FILE}`);
   let status: OpenCvWorkerStatus = 'not-loaded';
-  let errorMessage: string | null = null;
+  let error: VerificationError | null = null;
   let loadPromise: Promise<void> | null = null;
   let requestId = 0;
   let worker: Worker | null = null;
@@ -851,10 +868,14 @@ const createOpenCvSampler = (options: ResolvedLightTestOptions): OpenCvSampler =
       pending.reject(new Error(error || 'OpenCV worker request failed.'));
     });
     worker.addEventListener('error', (event: ErrorEvent) => {
-      const error = new Error(event.message || 'OpenCV worker crashed.');
+      const failure = createLightError(
+        'light.opencv_unavailable',
+        'Light response check could not start because OpenCV is unavailable.',
+        event,
+      );
       status = 'failed';
-      errorMessage = error.message;
-      rejectPendingRequests(error);
+      error = failure;
+      rejectPendingRequests(failure);
       worker?.terminate();
       worker = null;
       loadPromise = null;
@@ -903,9 +924,10 @@ const createOpenCvSampler = (options: ResolvedLightTestOptions): OpenCvSampler =
       worker = null;
       loadPromise = null;
       status = 'not-loaded';
+      error = null;
     },
     getError() {
-      return errorMessage;
+      return error;
     },
     getStatus() {
       return status;
@@ -920,18 +942,40 @@ const createOpenCvSampler = (options: ResolvedLightTestOptions): OpenCvSampler =
       }
 
       status = 'loading';
-      errorMessage = null;
-      loadPromise = sendRequest('load', { assetBaseUrl })
+      error = null;
+      let request: Promise<unknown>;
+      try {
+        request = sendRequest('load', { assetBaseUrl });
+      } catch (cause) {
+        const failure = toLightError(
+          cause,
+          'light.opencv_unavailable',
+          'Light response check could not start because OpenCV is unavailable.',
+        );
+        status = 'failed';
+        error = failure;
+        worker?.terminate();
+        worker = null;
+        loadPromise = null;
+        return Promise.reject(failure);
+      }
+
+      loadPromise = request
         .then(() => {
           status = 'ready';
         })
-        .catch((error: unknown) => {
+        .catch((cause: unknown) => {
+          const failure = toLightError(
+            cause,
+            'light.opencv_unavailable',
+            'Light response check could not start because OpenCV is unavailable.',
+          );
           status = 'failed';
-          errorMessage = getErrorMessage(error);
+          error = failure;
           worker?.terminate();
           worker = null;
           loadPromise = null;
-          throw error;
+          throw failure;
         });
 
       return loadPromise;
@@ -969,7 +1013,10 @@ const sampleLightTestPixels = async ({
   }
 
   if (openCv.getStatus() !== 'ready') {
-    return createEmptySample(sampleRects, 'OpenCV HSV engine unavailable.');
+    throw openCv.getError() ?? createLightError(
+      'light.opencv_unavailable',
+      'Light response check could not start because OpenCV is unavailable.',
+    );
   }
 
   const processingFrame = getLightTestProcessingFrameSize(
@@ -985,13 +1032,20 @@ const sampleLightTestPixels = async ({
   });
 
   if (!context) {
-    return createEmptySample(sampleRects, 'Light Test canvas unavailable.');
+    throw createLightError(
+      'light.canvas_unavailable',
+      'Light response check could not access the sampling canvas.',
+    );
   }
 
   try {
     context.drawImage(frame.video, 0, 0, processingFrame.width, processingFrame.height);
-  } catch (error) {
-    return createEmptySample(sampleRects, `Canvas frame read failed: ${getErrorMessage(error)}`);
+  } catch (cause) {
+    throw createLightError(
+      'light.sample_failed',
+      'Light response sampling failed while reading the camera frame.',
+      cause,
+    );
   }
 
   const regions: OpenCvRegionPayload[] = [];
@@ -1024,8 +1078,12 @@ const sampleLightTestPixels = async ({
         width: imageData.width,
       });
       transfer.push(imageData.data.buffer as ArrayBuffer);
-    } catch (error) {
-      return createEmptySample(sampleRects, `Canvas ROI read failed: ${getErrorMessage(error)}`);
+    } catch (cause) {
+      throw createLightError(
+        'light.sample_failed',
+        'Light response sampling failed while reading the sample region.',
+        cause,
+      );
     }
   }
 
@@ -1036,8 +1094,12 @@ const sampleLightTestPixels = async ({
   let workerSample: OpenCvSampleResult;
   try {
     workerSample = await openCv.sampleRegions(regions, transfer);
-  } catch (error) {
-    return createEmptySample(sampleRects, `OpenCV HSV sample failed: ${getErrorMessage(error)}`);
+  } catch (cause) {
+    throw toLightError(
+      cause,
+      'light.sample_failed',
+      'Light response sampling failed in OpenCV.',
+    );
   }
 
   const sampledPixels = workerSample.sampledPixels ?? 0;
@@ -1319,11 +1381,18 @@ export const createLightPipeline = ({
       if (openCv.getStatus() !== 'ready') {
         const error = openCv.getError();
         setIllumination(null, frame.timestamp);
+        if (openCv.getStatus() === 'failed') {
+          throw error ?? createLightError(
+            'light.opencv_unavailable',
+            'Light response check could not start because OpenCV is unavailable.',
+          );
+        }
+
         return {
           result: null,
           state: setState(
-            error ? `OpenCV HSV engine unavailable: ${error}` : 'Loading OpenCV HSV engine for Light Test...',
-            error ? 'OpenCV HSV engine unavailable.' : 'Loading OpenCV HSV engine for Light Test...',
+            'Loading OpenCV HSV engine for Light Test...',
+            'Loading OpenCV HSV engine for Light Test...',
             [],
             0,
           ),

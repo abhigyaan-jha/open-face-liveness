@@ -13,26 +13,30 @@ import { VerificationError } from '../errors.js';
 
 const DETECTOR_NUM_COORDS = 16;
 const DETECTOR_NUM_BOXES = 896;
-const DEFAULT_WASM_PATH = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+export const DEFAULT_ONNX_WASM_BASE_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';
 
 type NumericTensor = {
   data: ArrayLike<number>;
   dims: readonly number[];
 };
 
-let ortConfigured = false;
+interface OnnxAdapterOptions {
+  wasmBaseUrl?: string;
+}
 
-const configureOrt = () => {
-  if (ortConfigured) {
+let configuredOrtWasmBaseUrl: string | null = null;
+
+const configureOrt = (wasmBaseUrl = DEFAULT_ONNX_WASM_BASE_URL) => {
+  if (configuredOrtWasmBaseUrl === wasmBaseUrl) {
     return;
   }
 
   if (ort.env?.wasm) {
     ort.env.wasm.numThreads = 1;
-    ort.env.wasm.wasmPaths = DEFAULT_WASM_PATH;
+    ort.env.wasm.wasmPaths = wasmBaseUrl;
   }
 
-  ortConfigured = true;
+  configuredOrtWasmBaseUrl = wasmBaseUrl;
 };
 
 const getTensorDataSlice = (data: ArrayLike<number>, maxLength: number): number[] | Float32Array => {
@@ -132,8 +136,8 @@ const mergeDetectorOutputs = (
 const int32Scalar = (value: number): ort.Tensor =>
   new ort.Tensor('int32', Int32Array.from([Math.round(value)]), [1, 1]);
 
-const createSession = async (url: string): Promise<ort.InferenceSession> => {
-  configureOrt();
+const createSession = async (url: string, options: OnnxAdapterOptions = {}): Promise<ort.InferenceSession> => {
+  configureOrt(options.wasmBaseUrl);
   try {
     return await ort.InferenceSession.create(url, {
       executionProviders: ['wasm'],
@@ -166,8 +170,11 @@ const validateSession = async <T>(
   }
 };
 
-export const createOnnxDetectorAdapter = async (model: ResolvedModelSpec): Promise<DetectorAdapter> => {
-  const session = await createSession(model.url);
+export const createOnnxDetectorAdapter = async (
+  model: ResolvedModelSpec,
+  options: OnnxAdapterOptions = {},
+): Promise<DetectorAdapter> => {
+  const session = await createSession(model.url, options);
   const { inputName, outputNames } = await validateSession(session, () => {
     const inputName = session.inputNames[0];
     const outputNames = [...session.outputNames];
@@ -247,8 +254,11 @@ const getMeshIo = (session: ort.InferenceSession) => {
   };
 };
 
-export const createOnnxMeshAdapter = async (model: ResolvedModelSpec): Promise<MeshAdapter> => {
-  const session = await createSession(model.url);
+export const createOnnxMeshAdapter = async (
+  model: ResolvedModelSpec,
+  options: OnnxAdapterOptions = {},
+): Promise<MeshAdapter> => {
+  const session = await createSession(model.url, options);
   const io = await validateSession(session, () => getMeshIo(session));
 
   return {
@@ -295,8 +305,11 @@ export const createOnnxMeshAdapter = async (model: ResolvedModelSpec): Promise<M
   };
 };
 
-export const createOnnxSpoofAdapter = async (model: ResolvedModelSpec): Promise<SpoofAdapter> => {
-  const session = await createSession(model.url);
+export const createOnnxSpoofAdapter = async (
+  model: ResolvedModelSpec,
+  options: OnnxAdapterOptions = {},
+): Promise<SpoofAdapter> => {
+  const session = await createSession(model.url, options);
   const { inputName, outputName, outputNames } = await validateSession(session, () => {
     const inputName = session.inputNames[0];
     const outputName = session.outputNames[0];

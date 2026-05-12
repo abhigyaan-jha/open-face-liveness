@@ -1,5 +1,5 @@
 export { loadModelManifest, parseModelManifest, requireModelCapability, resolveModelSpecs } from './models/manifest.js';
-export { loadPhaseOneRuntime } from './models/loader.js';
+export { loadModelRuntime, loadPhaseOneRuntime } from './models/loader.js';
 export {
   VerificationError,
   VerificationRuntimeError,
@@ -14,7 +14,9 @@ export type {
   VerificationErrorOptions,
 } from './errors.js';
 export type {
+  LoadModelRuntimeOptions,
   LoadPhaseOneRuntimeOptions,
+  ModelRuntimeBundle,
   ModelCapability,
   ModelManifest,
   ModelSpec,

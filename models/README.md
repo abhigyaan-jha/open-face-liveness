@@ -19,28 +19,28 @@ Default manifest:
       "capability": "detector",
       "format": "onnx",
       "required": true,
-      "url": "/models/face_detection_front_128x128_float32_opt.onnx"
+      "url": "face_detection_front_128x128_float32_opt.onnx"
     },
     {
       "id": "face-mesh-192-post",
       "capability": "mesh",
       "format": "onnx",
       "required": true,
-      "url": "/models/face_mesh_192x192_post.onnx"
+      "url": "face_mesh_192x192_post.onnx"
     },
     {
       "id": "silent-face-minifasnet-v2-2.7",
       "capability": "spoof",
       "format": "onnx",
       "required": false,
-      "url": "/models/2.7_80x80_MiniFASNetV2.onnx"
+      "url": "2.7_80x80_MiniFASNetV2.onnx"
     },
     {
       "id": "silent-face-minifasnet-v1se-4.0",
       "capability": "spoof",
       "format": "onnx",
       "required": false,
-      "url": "/models/4_0_0_80x80_MiniFASNetV1SE.onnx"
+      "url": "4_0_0_80x80_MiniFASNetV1SE.onnx"
     }
   ]
 }
@@ -54,7 +54,7 @@ Manifest fields:
 - `capability`: runtime capability, one of `detector`, `mesh`, `spoof`, `liveness`, or `light`
 - `format`: currently `onnx`
 - `required`: whether the model is required for the configured runtime
-- `url`: browser-fetchable model URL
+- `url`: browser-fetchable model URL, usually relative to `models.baseUrl`
 
 ## Capabilities
 
@@ -69,14 +69,15 @@ loaded when the `spoof` check is enabled.
 
 ## Usage
 
-Serve this directory as public static assets:
+Serve this directory as public static assets, for example under
+`/web-verify/models/`:
 
 ```txt
-/models/manifest.json
-/models/face_detection_front_128x128_float32_opt.onnx
-/models/face_mesh_192x192_post.onnx
-/models/2.7_80x80_MiniFASNetV2.onnx
-/models/4_0_0_80x80_MiniFASNetV1SE.onnx
+/web-verify/models/manifest.json
+/web-verify/models/face_detection_front_128x128_float32_opt.onnx
+/web-verify/models/face_mesh_192x192_post.onnx
+/web-verify/models/2.7_80x80_MiniFASNetV2.onnx
+/web-verify/models/4_0_0_80x80_MiniFASNetV1SE.onnx
 ```
 
 Then point the client at the manifest:
@@ -86,7 +87,8 @@ import { createWebVerifyClient } from 'web-verify';
 
 const verifier = createWebVerifyClient({
   models: {
-    manifestUrl: '/models/manifest.json',
+    baseUrl: '/web-verify/models/',
+    manifestUrl: '/web-verify/models/manifest.json',
   },
 });
 ```
@@ -97,7 +99,8 @@ Or provide the manifest for a single session:
 const result = await verifier.start({
   video,
   models: {
-    manifestUrl: '/models/manifest.json',
+    baseUrl: '/web-verify/models/',
+    manifestUrl: '/web-verify/models/manifest.json',
   },
 });
 ```
@@ -109,6 +112,7 @@ Applications can provide their own manifest URL:
 ```ts
 const verifier = createWebVerifyClient({
   models: {
+    baseUrl: '/assets/web-verify/',
     manifestUrl: '/assets/web-verify/manifest.v1.json',
   },
 });
@@ -120,7 +124,9 @@ adapter.
 
 ## Notes
 
-- URLs are resolved by the browser, so absolute paths are relative to the site origin.
+- Relative model URLs resolve from `models.baseUrl` or from the manifest URL directory.
+- Absolute paths are still relative to the site origin.
 - Model files should be served with normal static-file caching.
+- Model attribution and license details are listed in `../THIRD_PARTY_NOTICES.md`.
 - If `spoof` is enabled and no spoof model can be loaded, the session fails with a canonical `VerificationError`.
-- Light checks also require OpenCV worker assets from `vendor/opencv/` unless a custom worker URL is configured.
+- Light checks also require OpenCV worker assets from `/web-verify/vendor/opencv/` unless a custom asset base or worker URL is configured.

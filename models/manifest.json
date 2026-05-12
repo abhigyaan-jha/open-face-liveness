@@ -6,28 +6,28 @@
       "capability": "detector",
       "format": "onnx",
       "required": true,
-      "url": "/models/face_detection_front_128x128_float32_opt.onnx"
+      "url": "face_detection_front_128x128_float32_opt.onnx"
     },
     {
       "id": "face-mesh-192-post",
       "capability": "mesh",
       "format": "onnx",
       "required": true,
-      "url": "/models/face_mesh_192x192_post.onnx"
+      "url": "face_mesh_192x192_post.onnx"
     },
     {
       "id": "silent-face-minifasnet-v2-2.7",
       "capability": "spoof",
       "format": "onnx",
       "required": false,
-      "url": "/models/2.7_80x80_MiniFASNetV2.onnx"
+      "url": "2.7_80x80_MiniFASNetV2.onnx"
     },
     {
       "id": "silent-face-minifasnet-v1se-4.0",
       "capability": "spoof",
       "format": "onnx",
       "required": false,
-      "url": "/models/4_0_0_80x80_MiniFASNetV1SE.onnx"
+      "url": "4_0_0_80x80_MiniFASNetV1SE.onnx"
     }
   ]
 }

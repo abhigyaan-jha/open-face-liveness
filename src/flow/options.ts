@@ -10,6 +10,7 @@ import type {
   VerificationCheck,
   VerificationOptions,
 } from '../config.js';
+import { DEFAULT_OPENCV_ASSET_BASE_URL } from '../config.js';
 import { DEFAULT_LIVENESS_OPTIONS, resolveLivenessOptions } from '../liveness/challenge.js';
 import { DEFAULT_LIGHT_SEQUENCE, resolveLightSequence } from '../light/sequence.js';
 
@@ -51,7 +52,7 @@ export const DEFAULT_LIGHT_OPTIONS: ResolvedLightTestOptions = {
   minColorResponseMagnitude: 0.008,
   minColorSequenceScore: 0.6,
   minSamplePixels: 80,
-  opencvAssetBaseUrl: '/vendor/opencv/',
+  opencvAssetBaseUrl: DEFAULT_OPENCV_ASSET_BASE_URL,
   opencvReadyTimeoutMs: 15000,
   opencvWorkerUrl: null,
   sequence: DEFAULT_LIGHT_SEQUENCE,
@@ -104,7 +105,9 @@ export const resolveVerificationOptions = <TVideo>(
   light: resolveLightOptions(options.light),
   liveness: resolveLivenessOptions(options.liveness),
   models: {
+    baseUrl: options.models.baseUrl,
     manifestUrl: options.models.manifestUrl,
+    onnxWasmBaseUrl: options.models.onnxWasmBaseUrl,
     overrides: options.models.overrides ? { ...options.models.overrides } : undefined,
   },
   video: options.video,

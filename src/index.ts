@@ -22,6 +22,7 @@ export { WebVerify, createWebVerifyClient } from './web-verify.js';
 export type {
   WebVerifyCheckSelection,
   WebVerifyClient,
+  WebVerifyLoadOptions,
   WebVerifyStartOptions,
 } from './web-verify.js';
 export { createLightSequence } from './light/sequence.js';

@@ -4,7 +4,7 @@
   "description": "Browser face verification, liveness, anti-spoofing, and light response toolkit.",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.4",
+  "packageManager": "bun@1.3.12",
   "license": "MIT",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -14,6 +14,8 @@
     "dist",
     "models",
     "vendor",
+    "licenses",
+    "THIRD_PARTY_NOTICES.md",
     "README.md",
     "LICENSE"
   ],
@@ -61,26 +63,34 @@
     "./spoof": {
       "types": "./dist/spoof/index.d.ts",
       "import": "./dist/spoof/index.js"
-    }
+    },
+    "./models/*": "./models/*",
+    "./vendor/opencv/*": "./vendor/opencv/*",
+    "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "demo": "vite --host 127.0.0.1",
+    "package:audit": "node scripts/audit-package.mjs",
+    "pack:dry-run": "npm pack --dry-run",
+    "prepack": "npm run build && npm run typecheck && npm test && npm run package:audit",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "onnxruntime-web": "^1.20.1",
-    "xstate": "^5.22.0"
+    "onnxruntime-web": "^1.26.0",
+    "xstate": "^5.31.1"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.4",
+    "@types/bun": "^1.3.13",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vite": "^8.0.12"
   },
   "keywords": [

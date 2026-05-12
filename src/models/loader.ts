@@ -9,7 +9,7 @@ import { createDetectorPipeline } from '../face/detector.js';
 import { createMeshPipeline } from '../face/mesh.js';
 import { createSpoofPipeline } from '../spoof/pipeline.js';
 import { VerificationError } from '../errors.js';
-import type { LoadPhaseOneRuntimeOptions, PhaseOneRuntimeBundle, SpoofAdapter } from '../models.js';
+import type { LoadModelRuntimeOptions, ModelRuntimeBundle, SpoofAdapter } from '../models.js';
 import { loadModelManifest, requireModelCapability, resolveModelSpecs } from './manifest.js';
 
 const createRequiredSpoofUnavailableError = (
@@ -25,18 +25,21 @@ const disposeSpoofAdapters = async (adapters: readonly SpoofAdapter[]): Promise<
   await Promise.all(adapters.map((adapter) => adapter.dispose()));
 };
 
-export const loadPhaseOneRuntime = async (
-  options: LoadPhaseOneRuntimeOptions,
-): Promise<PhaseOneRuntimeBundle> => {
+export const loadModelRuntime = async (
+  options: LoadModelRuntimeOptions,
+): Promise<ModelRuntimeBundle> => {
   const manifest = await loadModelManifest(options.models.manifestUrl);
-  const resolvedModels = resolveModelSpecs(manifest, options.models.overrides);
+  const resolvedModels = resolveModelSpecs(manifest, options.models.overrides, {
+    baseUrl: options.models.baseUrl,
+    manifestUrl: options.models.manifestUrl,
+  });
 
   const detectorModel = requireModelCapability(resolvedModels, 'detector');
   const meshModel = requireModelCapability(resolvedModels, 'mesh');
 
   const [detectorAdapter, meshAdapter] = await Promise.all([
-    createOnnxDetectorAdapter(detectorModel),
-    createOnnxMeshAdapter(meshModel),
+    createOnnxDetectorAdapter(detectorModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
+    createOnnxMeshAdapter(meshModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
   ]);
   const shouldLoadSpoof = Boolean(options.checks?.includes('spoof'));
 
@@ -47,7 +50,7 @@ export const loadPhaseOneRuntime = async (
   modelMap.set(detectorModel.id, attachIoMetadata(detectorModel, detector.metadata));
   modelMap.set(meshModel.id, attachIoMetadata(meshModel, mesh.metadata));
 
-  let spoof: PhaseOneRuntimeBundle['spoof'] = null;
+  let spoof: ModelRuntimeBundle['spoof'] = null;
   try {
     const spoofAdapters: SpoofAdapter[] = [];
     if (shouldLoadSpoof) {
@@ -59,7 +62,7 @@ export const loadPhaseOneRuntime = async (
 
       const spoofResults = await Promise.allSettled(
         spoofModels.map(async (model) => ({
-          adapter: await createOnnxSpoofAdapter(model),
+          adapter: await createOnnxSpoofAdapter(model, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
           model,
         })),
       );
@@ -102,8 +105,12 @@ export const loadPhaseOneRuntime = async (
       await Promise.all([detector.destroy(), mesh.destroy(), spoof?.destroy()]);
     },
     detector,
+    manifest,
     mesh,
     models: resolvedModels.map((model) => modelMap.get(model.id) ?? model),
     spoof,
   };
 };
+
+/** @deprecated Use loadModelRuntime instead. */
+export const loadPhaseOneRuntime = loadModelRuntime;

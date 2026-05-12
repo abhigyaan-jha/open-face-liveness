@@ -47,8 +47,8 @@ import {
   extractLivenessChallengeMetrics,
   type LivenessChallengeController,
 } from '../liveness/challenge.js';
-import { loadPhaseOneRuntime } from '../models/loader.js';
-import type { PhaseOneRuntimeBundle } from '../models.js';
+import { loadModelRuntime } from '../models/loader.js';
+import type { ModelRuntimeBundle } from '../models.js';
 import { summarizeSpoofSamples } from '../spoof/pipeline.js';
 import { createActor, fromCallback, fromPromise, type AnyEventObject } from 'xstate';
 import { requestCamera, type CameraHandle } from '../capture/camera.js';
@@ -56,11 +56,14 @@ import { createFrameLoop } from '../capture/frame-loop.js';
 import { getErrorMessage } from '../capture/media.js';
 import { SubscriptionStore, type Unsubscribe } from './subscriptions.js';
 
-export type VerificationOptions = CoreVerificationOptions<HTMLVideoElement>;
+export interface VerificationOptions extends CoreVerificationOptions<HTMLVideoElement> {
+  runtime?: ModelRuntimeBundle;
+}
+
 export type WebVerificationSnapshot = VerificationSnapshot<HTMLVideoElement>;
 
 export interface VerificationSession {
-  destroy(): void;
+  destroy(): Promise<void>;
   getSnapshot(): WebVerificationSnapshot;
   reset(): void;
   start(): Promise<VerificationResult>;
@@ -73,6 +76,11 @@ interface LivenessCompletionHold {
   readyAt: number;
   result: LivenessChallengeResult;
   state: LivenessChallengeState;
+}
+
+interface PendingStart {
+  promise: Promise<VerificationResult>;
+  reject(error: unknown): void;
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
@@ -122,6 +130,26 @@ const getSnapshotErrorCode = (snapshot: WebVerificationSnapshot): VerificationEr
     default:
       return 'unknown';
   }
+};
+
+const createSessionDestroyedError = (): VerificationError =>
+  new VerificationError(
+    'session.destroyed',
+    'Verification session was destroyed before completion.',
+    { area: 'session' },
+  );
+
+const modelRuntimeDestroyPromises = new WeakMap<ModelRuntimeBundle, Promise<void>>();
+
+const destroyModelRuntime = (runtime: ModelRuntimeBundle): Promise<void> => {
+  const existing = modelRuntimeDestroyPromises.get(runtime);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = Promise.resolve().then(() => runtime.destroy());
+  modelRuntimeDestroyPromises.set(runtime, promise);
+  return promise;
 };
 
 const createErrorDetail = (
@@ -250,13 +278,20 @@ const createRequestCameraActor = () =>
     };
   });
 
-const createLoadModelsActor = () =>
+const createLoadModelsActor = (runtime?: ModelRuntimeBundle) =>
   fromPromise<LoadModelsOutput, LoadModelsInput>(async ({ input }) => {
+    if (runtime) {
+      return {
+        handle: runtime,
+        models: runtime.models,
+      };
+    }
+
     const { checks, models } = input;
-    let bundle: PhaseOneRuntimeBundle;
+    let bundle: ModelRuntimeBundle;
 
     try {
-      bundle = await loadPhaseOneRuntime({ checks, models });
+      bundle = await loadModelRuntime({ checks, models });
     } catch (error) {
       throw toVerificationError(error, {
         area: 'models',
@@ -864,16 +899,27 @@ const createAnalyzeFaceActor = () =>
     };
   });
 
-const cleanupResources = (context: VerificationMachineResourceContext) => {
+const cleanupResources = async (
+  context: VerificationMachineResourceContext,
+  options: { destroyModels?: boolean } = {},
+): Promise<void> => {
   context.resources.cameraHandle?.stop();
-  void context.resources.modelsHandle?.destroy();
+  if (options.destroyModels === false) {
+    return;
+  }
+
+  const runtime = context.resources.modelsHandle;
+  if (runtime) {
+    await destroyModelRuntime(runtime);
+  }
 };
 
 export const createVerificationSession = (options: VerificationOptions): VerificationSession => {
+  const ownsRuntime = !options.runtime;
   const machine = createVerificationSessionMachine(options, {
     analyzeFace: createAnalyzeFaceActor(),
-    cleanup: cleanupResources,
-    loadModels: createLoadModelsActor(),
+    cleanup: (context) => cleanupResources(context, { destroyModels: ownsRuntime }),
+    loadModels: createLoadModelsActor(options.runtime),
     requestCamera: createRequestCameraActor(),
   });
   const actor = createActor(
@@ -882,7 +928,8 @@ export const createVerificationSession = (options: VerificationOptions): Verific
   );
   const store = new SubscriptionStore<WebVerificationSnapshot>();
   let latestSnapshot = toVerificationSnapshot<HTMLVideoElement>(actor.getSnapshot());
-  let pendingStart: Promise<VerificationResult> | null = null;
+  let destroyPromise: Promise<void> | null = null;
+  let pendingStart: PendingStart | null = null;
 
   actor.subscribe((snapshot) => {
     latestSnapshot = toVerificationSnapshot<HTMLVideoElement>(snapshot);
@@ -891,65 +938,126 @@ export const createVerificationSession = (options: VerificationOptions): Verific
   actor.start();
   latestSnapshot = toVerificationSnapshot<HTMLVideoElement>(actor.getSnapshot());
 
-  const waitForResult = (): Promise<VerificationResult> =>
-    new Promise((resolve, reject) => {
-      const unsubscribe = store.subscribe((snapshot) => {
-        if (snapshot.stage === 'completed') {
-          unsubscribe();
-          if (snapshot.result) {
-            resolve(snapshot.result);
-            return;
-          }
+  const createPendingStart = (): PendingStart => {
+    let rejectPromise!: (error: unknown) => void;
+    let resolvePromise!: (result: VerificationResult) => void;
+    let settled = false;
+    let unsubscribe: Unsubscribe | null = null;
+    const promise = new Promise<VerificationResult>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    const cleanup = () => {
+      unsubscribe?.();
+      unsubscribe = null;
+    };
+    const resolveStart = (result: VerificationResult) => {
+      if (settled) {
+        return;
+      }
 
-          reject(
-            new VerificationError(
-              'session.completed_without_result',
-              'Verification completed without a result.',
-              { area: 'session' },
-            ),
-          );
+      settled = true;
+      cleanup();
+      resolvePromise(result);
+    };
+    const rejectStart = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      rejectPromise(error);
+    };
+
+    unsubscribe = store.subscribe((snapshot) => {
+      if (snapshot.stage === 'completed') {
+        if (snapshot.result) {
+          resolveStart(snapshot.result);
           return;
         }
 
-        if (snapshot.stage === 'failed' || snapshot.stage === 'cancelled') {
-          unsubscribe();
-          reject(
-            new VerificationError(
-              getSnapshotErrorCode(snapshot),
-              snapshot.error ?? snapshot.instruction,
-              { detail: snapshot.errorDetail },
-            ),
-          );
-        }
-      });
+        rejectStart(
+          new VerificationError(
+            'session.completed_without_result',
+            'Verification completed without a result.',
+            { area: 'session' },
+          ),
+        );
+        return;
+      }
 
-      store.emit(latestSnapshot);
+      if (snapshot.stage === 'failed' || snapshot.stage === 'cancelled') {
+        rejectStart(
+          new VerificationError(
+            getSnapshotErrorCode(snapshot),
+            snapshot.error ?? snapshot.instruction,
+            { detail: snapshot.errorDetail },
+          ),
+        );
+      }
     });
+
+    store.emit(latestSnapshot);
+
+    return {
+      promise,
+      reject: rejectStart,
+    };
+  };
 
   return {
     destroy() {
-      cleanupResources(actor.getSnapshot().context);
-      actor.stop();
-      store.clear();
+      if (!destroyPromise) {
+        destroyPromise = (async () => {
+          const context = actor.getSnapshot().context;
+
+          pendingStart?.reject(createSessionDestroyedError());
+          pendingStart = null;
+          actor.stop();
+          store.clear();
+          await cleanupResources(context, { destroyModels: ownsRuntime });
+        })();
+      }
+
+      return destroyPromise;
     },
     getSnapshot() {
       return latestSnapshot;
     },
     reset() {
+      pendingStart?.reject(
+        new VerificationError(
+          'session.cancelled',
+          'Verification session was reset before completion.',
+          { area: 'session' },
+        ),
+      );
       pendingStart = null;
       actor.send({ type: 'RESET' });
     },
     start() {
       if (pendingStart) {
-        return pendingStart;
+        return pendingStart.promise;
+      }
+
+      if (destroyPromise) {
+        return Promise.reject(createSessionDestroyedError());
       }
 
       actor.send({ type: 'START' });
-      pendingStart = waitForResult().finally(() => {
-        pendingStart = null;
+      const nextStart = createPendingStart();
+      const promise = nextStart.promise.finally(() => {
+        if (pendingStart?.promise === promise) {
+          pendingStart = null;
+        }
       });
+      pendingStart = {
+        promise,
+        reject: nextStart.reject,
+      };
 
-      return pendingStart;
+      return promise;
     },
     stop() {
       actor.send({ type: 'STOP' });

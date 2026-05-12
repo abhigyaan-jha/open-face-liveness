@@ -2,6 +2,12 @@ import type { ModelCapability, ModelManifest, ModelSpec, ResolvedModelSpec } fro
 import { VerificationError } from '../errors.js';
 
 const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'spoof'];
+const URL_RESOLUTION_ORIGIN = 'https://web-verify.local';
+
+interface ResolveModelSpecOptions {
+  baseUrl?: string;
+  manifestUrl?: string;
+}
 
 const isModelCapability = (value: unknown): value is ModelCapability =>
   typeof value === 'string' && MODEL_CAPABILITIES.includes(value as ModelCapability);
@@ -84,14 +90,63 @@ export const loadModelManifest = async (manifestUrl: string): Promise<ModelManif
   return parseModelManifest(await response.json());
 };
 
+const hasUrlScheme = (url: string): boolean => /^[a-z][a-z\d+\-.]*:/i.test(url);
+
+const isAbsoluteRuntimeUrl = (url: string): boolean => hasUrlScheme(url) || url.startsWith('/');
+
+const ensureTrailingSlash = (url: string): string => url.endsWith('/') ? url : `${url}/`;
+
+const resolveUrl = (url: string, baseUrl?: string): string => {
+  if (!baseUrl || isAbsoluteRuntimeUrl(url)) {
+    return url;
+  }
+
+  const normalizedBaseUrl = ensureTrailingSlash(baseUrl);
+  if (hasUrlScheme(normalizedBaseUrl)) {
+    return new URL(url, normalizedBaseUrl).toString();
+  }
+
+  const originRelativeBaseUrl = normalizedBaseUrl.startsWith('/')
+    ? normalizedBaseUrl
+    : `/${normalizedBaseUrl}`;
+  const resolved = new URL(url, `${URL_RESOLUTION_ORIGIN}${originRelativeBaseUrl}`);
+
+  return normalizedBaseUrl.startsWith('/')
+    ? `${resolved.pathname}${resolved.search}${resolved.hash}`
+    : `${resolved.pathname.slice(1)}${resolved.search}${resolved.hash}`;
+};
+
+const getManifestBaseUrl = (manifestUrl?: string): string | undefined => {
+  if (!manifestUrl) {
+    return undefined;
+  }
+
+  if (hasUrlScheme(manifestUrl)) {
+    return new URL('.', manifestUrl).toString();
+  }
+
+  const originRelativeManifestUrl = manifestUrl.startsWith('/') ? manifestUrl : `/${manifestUrl}`;
+  const resolved = new URL('.', `${URL_RESOLUTION_ORIGIN}${originRelativeManifestUrl}`);
+
+  return manifestUrl.startsWith('/') ? resolved.pathname : resolved.pathname.slice(1);
+};
+
 export const resolveModelSpecs = (
   manifest: ModelManifest,
   overrides?: Partial<Record<ModelCapability, string>>,
-): ResolvedModelSpec[] =>
-  manifest.models.map((model) => ({
-    ...model,
-    url: overrides?.[model.capability] ?? model.url,
-  }));
+  options: ResolveModelSpecOptions = {},
+): ResolvedModelSpec[] => {
+  const baseUrl = options.baseUrl ?? getManifestBaseUrl(options.manifestUrl);
+
+  return manifest.models.map((model) => {
+    const url = overrides?.[model.capability] ?? model.url;
+
+    return {
+      ...model,
+      url: resolveUrl(url, baseUrl),
+    };
+  });
+};
 
 export const requireModelCapability = (
   models: readonly ResolvedModelSpec[],

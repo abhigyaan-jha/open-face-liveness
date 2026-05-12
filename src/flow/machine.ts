@@ -1,6 +1,6 @@
 import type { AnyEventObject, CallbackActorLogic, DoneActorEvent, PromiseActorLogic } from 'xstate';
 import { assign, setup } from 'xstate';
-import type { PhaseOneRuntimeBundle, ResolvedModelSpec, VerificationModelsOptions } from '../models.js';
+import type { ModelRuntimeBundle, ResolvedModelSpec, VerificationModelsOptions } from '../models.js';
 import { getInstructionForStage } from '../liveness/instructions.js';
 import type { CameraHandle } from '../capture/camera.js';
 import { resolveVerificationOptions } from './options.js';
@@ -30,7 +30,7 @@ import type {
 
 export interface VerificationMachineResources {
   cameraHandle: CameraHandle | null;
-  modelsHandle: PhaseOneRuntimeBundle | null;
+  modelsHandle: ModelRuntimeBundle | null;
 }
 
 export interface RequestCameraInput {
@@ -49,7 +49,7 @@ export interface LoadModelsInput {
 }
 
 export interface LoadModelsOutput {
-  handle: PhaseOneRuntimeBundle;
+  handle: ModelRuntimeBundle;
   models: ResolvedModelSpec[];
 }
 
@@ -59,7 +59,7 @@ export interface AnalyzeFaceInput {
   face: FaceFitOptions;
   light: ResolvedLightTestOptions;
   liveness: ResolvedLivenessChallengeOptions;
-  modelsHandle: PhaseOneRuntimeBundle;
+  modelsHandle: ModelRuntimeBundle;
   video: HTMLVideoElement;
 }
 
@@ -75,7 +75,7 @@ export interface VerificationMachineResourceContext extends VerificationContext<
 
 export interface VerificationMachineDependencies {
   analyzeFace: AnalyzeFaceActorLogic;
-  cleanup?: (context: VerificationMachineResourceContext) => void;
+  cleanup?: (context: VerificationMachineResourceContext) => Promise<void> | void;
   loadModels: LoadModelsActorLogic;
   now?: () => number;
   requestCamera: RequestCameraActorLogic;
@@ -383,7 +383,7 @@ const loadModelsInput = ({ context }: MachineContextArgs): LoadModelsInput => ({
   models: context.options.models,
 });
 
-const requireModelsHandle = (context: VerificationMachineResourceContext): PhaseOneRuntimeBundle => {
+const requireModelsHandle = (context: VerificationMachineResourceContext): ModelRuntimeBundle => {
   if (!context.resources.modelsHandle) {
     throw new VerificationError(
       'session.invalid_state',
@@ -529,7 +529,13 @@ export const createVerificationSessionMachine = (
   dependencies: VerificationMachineDependencies,
 ) => {
   const now = dependencies.now ?? (() => Date.now());
-  const cleanup = ({ context }: MachineContextArgs) => dependencies.cleanup?.(context);
+  const cleanup = ({ context }: MachineContextArgs) => {
+    try {
+      void dependencies.cleanup?.(context)?.catch(() => {});
+    } catch {
+      // Cleanup is best-effort when invoked from state-machine actions.
+    }
+  };
 
   return setup({
     actors: {

@@ -2,6 +2,11 @@ import type { InspectionEvent, Observer } from 'xstate';
 import type { VerificationModelsOptions } from './models.js';
 import type { LightTestColor, LivenessChallengeType } from './result.js';
 
+export const DEFAULT_ASSET_BASE_URL = '/web-verify/';
+export const DEFAULT_MODEL_BASE_URL = `${DEFAULT_ASSET_BASE_URL}models/`;
+export const DEFAULT_MODEL_MANIFEST_URL = `${DEFAULT_MODEL_BASE_URL}manifest.json`;
+export const DEFAULT_OPENCV_ASSET_BASE_URL = `${DEFAULT_ASSET_BASE_URL}vendor/opencv/`;
+
 export type VerificationCheck = 'face' | 'light' | 'liveness' | 'spoof';
 export type RuntimeVerificationCheck = 'face' | 'light' | 'liveness' | 'spoof';
 export type VerificationActorInspect = Observer<InspectionEvent> | ((inspectionEvent: InspectionEvent) => void);
@@ -153,9 +158,7 @@ export interface CheckConfig {
   spoof: boolean;
 }
 
-export interface ModelConfig {
-  manifestUrl: string;
-}
+export interface ModelConfig extends VerificationModelsOptions {}
 
 export interface DebugConfig {
   overlay: boolean;
@@ -186,7 +189,8 @@ export const defaultConfig: WebVerifyConfig = {
     timings: false,
   },
   models: {
-    manifestUrl: '/models/manifest.json',
+    baseUrl: DEFAULT_MODEL_BASE_URL,
+    manifestUrl: DEFAULT_MODEL_MANIFEST_URL,
   },
 };
 
