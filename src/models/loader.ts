@@ -1,6 +1,7 @@
 import type { ResolvedModelSpec } from '../models.js';
 import {
   attachIoMetadata,
+  createOnnxBlendshapeAdapter,
   createOnnxDetectorAdapter,
   createOnnxMeshAdapter,
   createOnnxSpoofAdapter,
@@ -42,35 +43,47 @@ export const loadModelRuntime = async (
 
   const detectorModel = requireModelCapability(resolvedModels, 'detector');
   const meshModel = requireModelCapability(resolvedModels, 'mesh');
+  const blendshapeModel = requireModelCapability(resolvedModels, 'blendshape');
 
-  const [detectorAdapterResult, meshAdapterResult] = await Promise.allSettled([
+  const [detectorAdapterResult, meshAdapterResult, blendshapeAdapterResult] = await Promise.allSettled([
     createOnnxDetectorAdapter(detectorModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
     createOnnxMeshAdapter(meshModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
+    createOnnxBlendshapeAdapter(blendshapeModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
   ]);
 
   if (detectorAdapterResult.status === 'rejected') {
-    if (meshAdapterResult.status === 'fulfilled') {
-      await disposeCreatedAdapters([meshAdapterResult.value]);
-    }
-
+    await disposeCreatedAdapters([
+      ...(meshAdapterResult.status === 'fulfilled' ? [meshAdapterResult.value] : []),
+      ...(blendshapeAdapterResult.status === 'fulfilled' ? [blendshapeAdapterResult.value] : []),
+    ]);
     throw detectorAdapterResult.reason;
   }
 
   if (meshAdapterResult.status === 'rejected') {
-    await disposeCreatedAdapters([detectorAdapterResult.value]);
+    await disposeCreatedAdapters([
+      detectorAdapterResult.value,
+      ...(blendshapeAdapterResult.status === 'fulfilled' ? [blendshapeAdapterResult.value] : []),
+    ]);
     throw meshAdapterResult.reason;
+  }
+
+  if (blendshapeAdapterResult.status === 'rejected') {
+    await disposeCreatedAdapters([detectorAdapterResult.value, meshAdapterResult.value]);
+    throw blendshapeAdapterResult.reason;
   }
 
   const detectorAdapter = detectorAdapterResult.value;
   const meshAdapter = meshAdapterResult.value;
+  const blendshapeAdapter = blendshapeAdapterResult.value;
   const shouldLoadSpoof = Boolean(options.checks?.includes('spoof'));
 
   const detector = createDetectorPipeline(detectorAdapter);
-  const mesh = createMeshPipeline(meshAdapter);
+  const mesh = createMeshPipeline(meshAdapter, blendshapeAdapter);
 
   const modelMap = new Map<string, ResolvedModelSpec>(resolvedModels.map((model) => [model.id, model]));
   modelMap.set(detectorModel.id, attachIoMetadata(detectorModel, detector.metadata));
   modelMap.set(meshModel.id, attachIoMetadata(meshModel, mesh.metadata));
+  modelMap.set(blendshapeModel.id, attachIoMetadata(blendshapeModel, blendshapeAdapter.metadata));
 
   let spoof: ModelRuntimeBundle['spoof'] = null;
   try {

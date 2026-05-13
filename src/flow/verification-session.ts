@@ -38,7 +38,7 @@ import type {
   SpoofSummaryResult,
   VerificationResult,
 } from '../result.js';
-import { getFaceComparisonBox, getFaceGuideRect } from '../face/geometry.js';
+import { getFaceGuideRect } from '../face/geometry.js';
 import { getAnchorDrift, getAnchorPosition, isAnchorStable } from '../face/stability.js';
 import { validateFaceFit } from '../face/fit.js';
 import { createLightPipeline, type LightPipeline } from '../light/pipeline.js';
@@ -430,6 +430,10 @@ const createAnalyzeFaceActor = () =>
       stableStartedAt = 0;
     };
 
+    const resetMeshTracking = () => {
+      runtime.mesh.reset?.();
+    };
+
     const emitDebugFrame = (diagnostics: DiagnosticsFrame) => {
       if (!debug.enabled || diagnostics.timestamp - lastDebugAt < debug.throttleMs) {
         return;
@@ -661,6 +665,7 @@ const createAnalyzeFaceActor = () =>
 
         if (!detection) {
           const isRunningLight = Boolean(lightPipeline && livenessCompleted && !lightCompleted);
+          resetMeshTracking();
           resetStability();
           stage = isRunningLight ? 'lightChallenge' : faceReadyEmitted ? 'livenessChallenge' : stage;
           const diagnostics = createDiagnosticsFrame({
@@ -719,6 +724,7 @@ const createAnalyzeFaceActor = () =>
 
         if (!mesh) {
           const isRunningLight = Boolean(lightPipeline && livenessCompleted && !lightCompleted);
+          resetMeshTracking();
           resetStability();
           stage = isRunningLight ? 'lightChallenge' : faceReadyEmitted ? 'livenessChallenge' : stage;
           const diagnostics = createDiagnosticsFrame({
@@ -770,9 +776,13 @@ const createAnalyzeFaceActor = () =>
 
         livenessMetrics = extractLivenessChallengeMetrics(mesh);
         const guideBox = getFaceGuideRect(video.videoWidth, video.videoHeight);
-        const comparisonBox = getFaceComparisonBox(detection, video.videoWidth, video.videoHeight);
+        const comparisonBox = mesh.geometry.fitBox;
         faceFit = validateFaceFit(comparisonBox, guideBox, face);
-        const anchorPosition = getAnchorPosition(comparisonBox, video.videoWidth, video.videoHeight);
+        const anchorPosition = getAnchorPosition(
+          mesh.geometry.anchorBox,
+          video.videoWidth,
+          video.videoHeight,
+        );
         const isRunningLight = Boolean(lightPipeline && livenessCompleted && !lightCompleted);
 
         if (isRunningLight && lightPipeline) {

@@ -1,5 +1,6 @@
 import * as ort from 'onnxruntime-web';
 import type {
+  BlendshapeAdapter,
   DetectorAdapter,
   DetectorRawResult,
   MeshAdapter,
@@ -13,6 +14,7 @@ import { VerificationError } from '../errors.js';
 
 const DETECTOR_NUM_COORDS = 16;
 const DETECTOR_NUM_BOXES = 896;
+const BLENDSHAPE_SCORE_COUNT = 52;
 export const DEFAULT_ONNX_WASM_BASE_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';
 
 type NumericTensor = {
@@ -133,8 +135,7 @@ const mergeDetectorOutputs = (
   return { boxes, scores };
 };
 
-const int32Scalar = (value: number): ort.Tensor =>
-  new ort.Tensor('int32', Int32Array.from([Math.round(value)]), [1, 1]);
+const sigmoid = (value: number): number => 1 / (1 + Math.exp(-value));
 
 const createSession = async (url: string, options: OnnxAdapterOptions = {}): Promise<ort.InferenceSession> => {
   configureOrt(options.wasmBaseUrl);
@@ -218,39 +219,23 @@ export const createOnnxDetectorAdapter = async (
 const getMeshIo = (session: ort.InferenceSession) => {
   const inputNames = session.inputNames;
   const outputNames = [...session.outputNames];
-  const inputName = inputNames.find((name) => name === 'input');
-  const cropXName = inputNames.find((name) => name === 'crop_x1');
-  const cropYName = inputNames.find((name) => name === 'crop_y1');
-  const cropWidthName = inputNames.find((name) => name === 'crop_width');
-  const cropHeightName = inputNames.find((name) => name === 'crop_height');
-  const scoreOutputName = outputNames.find((name) => name === 'score');
-  const landmarksOutputName = outputNames.find((name) => name === 'final_landmarks');
+  const inputName = inputNames.find((name) => name === 'input_12');
+  const landmarksOutputName = outputNames.find((name) => name === 'Identity');
+  const presenceOutputName = outputNames.find((name) => name === 'Identity_1');
 
-  if (
-    !inputName ||
-    !cropXName ||
-    !cropYName ||
-    !cropWidthName ||
-    !cropHeightName ||
-    !scoreOutputName ||
-    !landmarksOutputName
-  ) {
+  if (!inputName || !presenceOutputName || !landmarksOutputName) {
     throw new VerificationError(
       'models.adapter_invalid',
-      'Unexpected face mesh model I/O signature.',
+      'Unexpected Google face landmarks model I/O signature.',
       { area: 'models' },
     );
   }
 
   return {
-    cropHeightName,
-    cropWidthName,
-    cropXName,
-    cropYName,
     inputName,
     landmarksOutputName,
     outputNames,
-    scoreOutputName,
+    presenceOutputName,
   };
 };
 
@@ -266,26 +251,16 @@ export const createOnnxMeshAdapter = async (
       await releaseSession(session);
     },
     metadata: {
-      inputs: [
-        io.inputName,
-        io.cropXName,
-        io.cropYName,
-        io.cropWidthName,
-        io.cropHeightName,
-      ],
+      inputs: [io.inputName],
       outputs: [...io.outputNames],
     },
     async run(input: MeshRawInput): Promise<MeshRawResult | null> {
       const startedAt = performance.now();
       const outputs = await session.run({
-        [io.cropHeightName]: int32Scalar(input.crop.height),
-        [io.cropWidthName]: int32Scalar(input.crop.width),
-        [io.cropXName]: int32Scalar(input.crop.x),
-        [io.cropYName]: int32Scalar(input.crop.y),
-        [io.inputName]: new ort.Tensor('float32', input.image, [1, 3, 192, 192]),
+        [io.inputName]: new ort.Tensor('float32', input.image, [1, 256, 256, 3]),
       });
 
-      const scoreTensor = outputs[io.scoreOutputName];
+      const scoreTensor = outputs[io.presenceOutputName];
       const landmarksTensor = outputs[io.landmarksOutputName];
 
       if (!hasNumericTensorData(scoreTensor) || scoreTensor.data.length === 0) {
@@ -299,7 +274,67 @@ export const createOnnxMeshAdapter = async (
       return {
         landmarks: Float32Array.from(landmarksTensor.data),
         runMs: performance.now() - startedAt,
-        score: Number(scoreTensor.data[0]),
+        score: sigmoid(Number(scoreTensor.data[0])),
+      };
+    },
+  };
+};
+
+const getBlendshapeIo = (session: ort.InferenceSession) => {
+  const inputNames = session.inputNames;
+  const outputNames = [...session.outputNames];
+  const inputName = inputNames.find((name) => name === 'serving_default_input_points:0');
+  const outputName = outputNames.find((name) => name === 'StatefulPartitionedCall:0');
+
+  if (!inputName || !outputName) {
+    throw new VerificationError(
+      'models.adapter_invalid',
+      'Unexpected Google face blendshape model I/O signature.',
+      { area: 'models' },
+    );
+  }
+
+  return {
+    inputName,
+    outputName,
+    outputNames,
+  };
+};
+
+export const createOnnxBlendshapeAdapter = async (
+  model: ResolvedModelSpec,
+  options: OnnxAdapterOptions = {},
+): Promise<BlendshapeAdapter> => {
+  const session = await createSession(model.url, options);
+  const io = await validateSession(session, () => getBlendshapeIo(session));
+
+  return {
+    async dispose() {
+      await releaseSession(session);
+    },
+    metadata: {
+      inputs: [io.inputName],
+      outputs: [...io.outputNames],
+    },
+    async run(input: Float32Array) {
+      const startedAt = performance.now();
+      const outputs = await session.run({
+        [io.inputName]: new ort.Tensor('float32', input, [1, 146, 2]),
+      });
+      const scoresTensor = outputs[io.outputName];
+
+      if (!hasNumericTensorData(scoresTensor) || scoresTensor.data.length < BLENDSHAPE_SCORE_COUNT) {
+        return null;
+      }
+
+      const scores = Float32Array.from(scoresTensor.data).subarray(0, BLENDSHAPE_SCORE_COUNT);
+      if (scores.some((score) => !Number.isFinite(score))) {
+        return null;
+      }
+
+      return {
+        runMs: performance.now() - startedAt,
+        scores,
       };
     },
   };

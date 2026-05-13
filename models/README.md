@@ -15,18 +15,25 @@ Default manifest:
   "version": 1,
   "models": [
     {
-      "id": "face-detector-front-128",
+      "id": "mediapipe-face-detector-short-range-128",
       "capability": "detector",
       "format": "onnx",
       "required": true,
-      "url": "face_detection_front_128x128_float32_opt.onnx"
+      "url": "face_detector_short_range_128x128_float32.onnx"
     },
     {
-      "id": "face-mesh-192-post",
+      "id": "mediapipe-face-landmarks-detector-256",
       "capability": "mesh",
       "format": "onnx",
       "required": true,
-      "url": "face_mesh_192x192_post.onnx"
+      "url": "face_landmarks_detector_256x256_float32.onnx"
+    },
+    {
+      "id": "mediapipe-face-blendshapes-146",
+      "capability": "blendshape",
+      "format": "onnx",
+      "required": true,
+      "url": "face_blendshapes_146x2_float32.onnx"
     },
     {
       "id": "silent-face-minifasnet-v2-2.7",
@@ -51,7 +58,7 @@ Manifest fields:
 - `version`: manifest schema version
 - `models`: list of browser-loadable model specs
 - `id`: stable model identifier
-- `capability`: runtime model capability, one of `detector`, `mesh`, or `spoof`
+- `capability`: runtime model capability, one of `detector`, `mesh`, `blendshape`, or `spoof`
 - `format`: currently `onnx`
 - `required`: whether the model is required for the configured runtime
 - `url`: browser-fetchable model URL, usually relative to `models.baseUrl`
@@ -60,12 +67,14 @@ Manifest fields:
 
 - `detector`: face detector model used before mesh, fit, liveness, light, and spoof checks
 - `mesh`: face landmark model used for readiness, movement metrics, and diagnostics
+- `blendshape`: face expression model used for liveness gesture metrics such as mouth open
 - `spoof`: optional presentation-attack scoring models
 
-The current default runtime requires `detector` and `mesh`. Spoof models are
-loaded when the `spoof` check is enabled.
-Liveness is implemented from face mesh movement metrics. Light response checks
-use the OpenCV worker assets in `vendor/opencv/`, not manifest model entries.
+The current default runtime requires `detector`, `mesh`, and `blendshape`.
+Spoof models are loaded when the `spoof` check is enabled. Liveness combines
+face mesh movement metrics with blendshape expression scores. Light response
+checks use the OpenCV worker assets in `vendor/opencv/`, not manifest model
+entries.
 
 ## Usage
 
@@ -74,8 +83,9 @@ Serve this directory as public static assets, for example under
 
 ```txt
 /web-verify/models/manifest.json
-/web-verify/models/face_detection_front_128x128_float32_opt.onnx
-/web-verify/models/face_mesh_192x192_post.onnx
+/web-verify/models/face_detector_short_range_128x128_float32.onnx
+/web-verify/models/face_landmarks_detector_256x256_float32.onnx
+/web-verify/models/face_blendshapes_146x2_float32.onnx
 /web-verify/models/2.7_80x80_MiniFASNetV2.onnx
 /web-verify/models/4_0_0_80x80_MiniFASNetV1SE.onnx
 ```

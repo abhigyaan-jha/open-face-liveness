@@ -51,7 +51,7 @@ export interface WebVerifyClient {
 }
 
 const CHECK_ORDER: readonly VerificationCheck[] = ['face', 'liveness', 'light', 'spoof'];
-const BASE_RUNTIME_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh'];
+const BASE_RUNTIME_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'blendshape'];
 
 const isCheckSelectionList = (
   checks: WebVerifyCheckSelection | undefined,

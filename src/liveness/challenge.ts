@@ -8,7 +8,6 @@ import type {
   FaceAnchorPosition,
   FaceFitResult,
   FaceMeshResult,
-  LandmarkList,
   LivenessChallengeDirection,
   LivenessChallengeFrame,
   LivenessChallengeMetrics,
@@ -19,93 +18,33 @@ import type {
   LivenessChallengeType,
 } from '../result.js';
 
-const CHALLENGE_LANDMARKS = {
-  chin: 152,
-  faceEdgeLeft: 234,
-  faceEdgeRight: 454,
-  forehead: 10,
-  mouthLeft: 61,
-  mouthLowerInner: 14,
-  mouthRight: 291,
-  mouthUpperInner: 13,
-  noseTip: 4,
-} as const;
-
-interface LandmarkPoint {
-  x: number;
-  y: number;
-  z: number;
-}
-
-const getLandmarkPoint = (
-  landmarks: LandmarkList,
-  index: number,
-): LandmarkPoint | null => {
-  const offset = index * 3;
-  if (offset < 0 || offset + 2 >= landmarks.length) {
-    return null;
-  }
-
-  const x = landmarks[offset];
-  const y = landmarks[offset + 1];
-  const z = landmarks[offset + 2];
-
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-    return null;
-  }
-
-  return {
-    x,
-    y,
-    z,
-  };
-};
-
-const getPointDistance = (left: LandmarkPoint, right: LandmarkPoint): number =>
-  Math.hypot(left.x - right.x, left.y - right.y);
+const MOUTH_CLOSE_NEUTRAL_RATIO = 0.45;
+const MOUTH_CLOSE_OPEN_SUPPRESSION_RATIO = 0.35;
 
 export const extractLivenessChallengeMetrics = (
   mesh: FaceMeshResult,
 ): LivenessChallengeMetrics | null => {
-  const { landmarks } = mesh;
-  const noseTip = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.noseTip);
-  const faceEdgeLeft = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.faceEdgeLeft);
-  const faceEdgeRight = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.faceEdgeRight);
-  const forehead = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.forehead);
-  const chin = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.chin);
-  const mouthUpperInner = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.mouthUpperInner);
-  const mouthLowerInner = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.mouthLowerInner);
-  const mouthLeft = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.mouthLeft);
-  const mouthRight = getLandmarkPoint(landmarks, CHALLENGE_LANDMARKS.mouthRight);
+  const pose = mesh.geometry.pose;
+  const mouthRatio = mesh.blendshapes.jawOpen;
+  const mouthClose = mesh.blendshapes.mouthClose;
 
   if (
-    !noseTip ||
-    !faceEdgeLeft ||
-    !faceEdgeRight ||
-    !forehead ||
-    !chin ||
-    !mouthUpperInner ||
-    !mouthLowerInner ||
-    !mouthLeft ||
-    !mouthRight
+    !pose ||
+    !Number.isFinite(mouthRatio) ||
+    !Number.isFinite(mouthClose) ||
+    !Number.isFinite(pose.pitch) ||
+    !Number.isFinite(pose.roll) ||
+    !Number.isFinite(pose.yaw)
   ) {
     return null;
   }
 
-  const faceWidth = faceEdgeRight.x - faceEdgeLeft.x;
-  const faceHeight = chin.y - forehead.y;
-  const mouthWidth = getPointDistance(mouthLeft, mouthRight);
-  const mouthGap = getPointDistance(mouthUpperInner, mouthLowerInner);
-
-  if (faceWidth <= 1 || faceHeight <= 1 || mouthWidth <= 0) {
-    return null;
-  }
-
   return {
-    mouthRatio: mouthGap / mouthWidth,
-    pitch: (noseTip.y - forehead.y) / faceHeight,
-    roll: Math.atan2(faceEdgeRight.y - faceEdgeLeft.y, faceEdgeRight.x - faceEdgeLeft.x),
-    yaw: ((faceEdgeRight.x - noseTip.x) - (noseTip.x - faceEdgeLeft.x)) / faceWidth,
+    mouthClose,
+    mouthRatio,
+    pitch: pose.pitch,
+    roll: pose.roll,
+    yaw: pose.yaw,
   };
 };
 
@@ -235,6 +174,7 @@ const getAverageAnchorPosition = (
 };
 
 interface PoseSnapshot {
+  mouthClose: number;
   mouthRatio: number;
   pitch: number;
   roll: number;
@@ -261,6 +201,24 @@ const isPanChallenge = (challenge: LivenessChallengeType | null): boolean =>
 const isPitchChallenge = (challenge: LivenessChallengeType | null): boolean =>
   challenge === 'head_pitch_up' || challenge === 'head_pitch_down';
 
+const isPoseWithinAbsoluteNeutral = (
+  pose: PoseSnapshot,
+  options: ResolvedLivenessChallengeOptions,
+): boolean =>
+  Math.abs(pose.yaw) <= options.neutralAbsoluteYawLimit &&
+  Math.abs(pose.pitch) <= options.neutralAbsolutePitchLimit &&
+  Math.abs(pose.roll) <= options.neutralAbsoluteRollLimit;
+
+const isMouthNeutral = (
+  pose: PoseSnapshot,
+  options: ResolvedLivenessChallengeOptions,
+): boolean =>
+  pose.mouthRatio < options.neutralMouthOpenRatio ||
+  (
+    pose.mouthClose >= MOUTH_CLOSE_NEUTRAL_RATIO &&
+    pose.mouthRatio < options.neutralMouthOpenRatio * 1.5
+  );
+
 export interface LivenessChallengeController {
   getResult(completedAt: number): LivenessChallengeResult | null;
   getState(): LivenessChallengeState;
@@ -280,6 +238,7 @@ export const createLivenessChallengeController = (
   let smoothedPitch: number | null = null;
   let smoothedRoll: number | null = null;
   let smoothedMouthRatio: number | null = null;
+  let smoothedMouthClose: number | null = null;
   let challengeRecords: LivenessChallengeRecord[] = [];
   let pendingChallengeStart: {
     start: PoseSnapshot;
@@ -293,7 +252,7 @@ export const createLivenessChallengeController = (
   let celebrationEndedAt: number | null = null;
   let stabilizationStartedAt = 0;
   let stabilizationBuffer: FaceAnchorPosition[] = [];
-  let stabilizationPoseBuffer: { mouthRatio: number; pitch: number; roll: number; yaw: number }[] = [];
+  let stabilizationPoseBuffer: PoseSnapshot[] = [];
   let holdStartedAt = 0;
   let celebratingUntil = 0;
   let recenterStartedAt = 0;
@@ -390,12 +349,14 @@ export const createLivenessChallengeController = (
       !isFiniteNumber(smoothedYaw) ||
       !isFiniteNumber(smoothedPitch) ||
       !isFiniteNumber(smoothedRoll) ||
-      !isFiniteNumber(smoothedMouthRatio)
+      !isFiniteNumber(smoothedMouthRatio) ||
+      !isFiniteNumber(smoothedMouthClose)
     ) {
       return null;
     }
 
     return {
+      mouthClose: smoothedMouthClose,
       mouthRatio: smoothedMouthRatio,
       pitch: smoothedPitch,
       roll: smoothedRoll,
@@ -431,19 +392,20 @@ export const createLivenessChallengeController = (
     // mouth instruction once the user is actually facing the camera.
     const pose = getCurrentPoseSnapshot();
     const poseOffAxis = !pose || (
-      !!neutralPoseReference &&
-      (
+      neutralPoseReference
+        ? (
         Math.abs(pose.yaw - neutralPoseReference.yaw) > resolvedOptions.neutralAbsoluteYawLimit ||
         Math.abs(pose.pitch - neutralPoseReference.pitch) > resolvedOptions.neutralAbsolutePitchLimit ||
         Math.abs(pose.roll - neutralPoseReference.roll) > resolvedOptions.neutralAbsoluteRollLimit
-      )
+        )
+        : !isPoseWithinAbsoluteNeutral(pose, resolvedOptions)
     );
 
     if (poseOffAxis) {
       return isContinuation ? 'Return to neutral position' : 'Face the camera to begin';
     }
 
-    if (isFiniteNumber(smoothedMouthRatio) && smoothedMouthRatio >= resolvedOptions.neutralMouthOpenRatio) {
+    if (pose && !isMouthNeutral(pose, resolvedOptions)) {
       return isContinuation ? 'Close your mouth to continue' : 'Close your mouth to begin';
     }
 
@@ -470,15 +432,19 @@ export const createLivenessChallengeController = (
       return false;
     }
 
-    const mouthNeutral = pose.mouthRatio < resolvedOptions.neutralMouthOpenRatio;
-    if (!mouthNeutral) {
+    if (!isMouthNeutral(pose, resolvedOptions)) {
       wasPoseNeutral = false;
       poseEjectionStartedAt = null;
       return false;
     }
 
     if (!neutralPoseReference) {
-      return true;
+      const withinAbsoluteNeutral = isPoseWithinAbsoluteNeutral(pose, resolvedOptions);
+      if (withinAbsoluteNeutral) {
+        wasPoseNeutral = true;
+        poseEjectionStartedAt = null;
+      }
+      return withinAbsoluteNeutral;
     }
 
     const withinAdmit =
@@ -631,9 +597,11 @@ export const createLivenessChallengeController = (
         isFiniteNumber(smoothedYaw) &&
         isFiniteNumber(smoothedPitch) &&
         isFiniteNumber(smoothedRoll) &&
-        isFiniteNumber(smoothedMouthRatio)
+        isFiniteNumber(smoothedMouthRatio) &&
+        isFiniteNumber(smoothedMouthClose)
       ) {
         stabilizationPoseBuffer.push({
+          mouthClose: smoothedMouthClose,
           mouthRatio: smoothedMouthRatio,
           pitch: smoothedPitch,
           roll: smoothedRoll,
@@ -894,7 +862,7 @@ export const createLivenessChallengeController = (
       Math.abs(pose.pitch - startPose.pitch) <= resolvedOptions.neutralEjectionPitchLimit;
     const rollNearStart =
       Math.abs(pose.roll - startPose.roll) <= resolvedOptions.neutralEjectionRollLimit;
-    const mouthClosed = pose.mouthRatio < resolvedOptions.neutralMouthOpenRatio;
+    const mouthClosed = isMouthNeutral(pose, resolvedOptions);
     const yawDeltaLimit = Math.max(
       0,
       resolvedOptions.challengeYawLimit - resolvedOptions.neutralAbsoluteYawLimit,
@@ -936,6 +904,7 @@ export const createLivenessChallengeController = (
       case 'mouth_open':
         return (
           pose.mouthRatio >= resolvedOptions.challengeMouthOpenRatio &&
+          pose.mouthClose <= MOUTH_CLOSE_OPEN_SUPPRESSION_RATIO &&
           yawNearStart &&
           pitchNearStart &&
           rollNearStart
@@ -954,6 +923,7 @@ export const createLivenessChallengeController = (
         challenge,
         completedAt: now,
         final: {
+          mouthClose: smoothedMouthClose,
           mouthRatio: smoothedMouthRatio,
           pitch: smoothedPitch,
           roll: smoothedRoll,
@@ -1097,6 +1067,11 @@ export const createLivenessChallengeController = (
       frame.metrics.mouthRatio,
       resolvedOptions.smoothingAlpha,
     );
+    smoothedMouthClose = smoothValue(
+      smoothedMouthClose,
+      frame.metrics.mouthClose,
+      resolvedOptions.smoothingAlpha,
+    );
     updateTelemetry();
 
     switch (state.phase) {
@@ -1132,6 +1107,7 @@ export const createLivenessChallengeController = (
     smoothedPitch = null;
     smoothedRoll = null;
     smoothedMouthRatio = null;
+    smoothedMouthClose = null;
     challengeRecords = [];
     pendingChallengeStart = null;
     neutralPoseReference = null;

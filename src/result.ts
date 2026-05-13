@@ -40,12 +40,36 @@ export interface FaceDetectionResult {
 
 export type LandmarkList = Float32Array | readonly number[];
 
+export interface FaceBlendshapeResult {
+  eyeBlinkLeft: number;
+  eyeBlinkRight: number;
+  jawOpen: number;
+  mouthClose: number;
+  runMs: number;
+  scores: Float32Array;
+}
+
+export interface FacePoseResult {
+  matrix: readonly number[];
+  pitch: number;
+  roll: number;
+  yaw: number;
+}
+
+export interface FaceGeometryResult {
+  anchorBox: Rect | null;
+  fitBox: Rect | null;
+  pose: FacePoseResult | null;
+}
+
 export interface FaceMeshResult {
+  blendshapes: FaceBlendshapeResult;
   bounds: LandmarkBounds;
   centroid: Point3D;
   crop: Rect;
   frameHeight: number;
   frameWidth: number;
+  geometry: FaceGeometryResult;
   landmarkCount: number;
   landmarks: LandmarkList;
   runMs: number;
@@ -111,6 +135,7 @@ export type LivenessChallengePhase =
 export type LivenessChallengeDirection = 'down' | 'left' | 'none' | 'right' | 'up';
 
 export interface LivenessChallengeMetrics {
+  mouthClose: number;
   mouthRatio: number;
   pitch: number;
   roll: number;
@@ -118,6 +143,7 @@ export interface LivenessChallengeMetrics {
 }
 
 export interface LivenessChallengePoseSnapshot {
+  mouthClose: number | null;
   mouthRatio: number | null;
   pitch: number | null;
   roll: number | null;

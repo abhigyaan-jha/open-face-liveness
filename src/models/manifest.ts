@@ -7,7 +7,7 @@ import type {
 } from '../models.js';
 import { VerificationError } from '../errors.js';
 
-const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'spoof'];
+const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'blendshape', 'spoof'];
 const URL_RESOLUTION_ORIGIN = 'https://web-verify.local';
 
 interface ResolveModelSpecOptions {

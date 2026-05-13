@@ -32,10 +32,12 @@ const drawRect = (
   rect: Rect,
   color: string,
   lineWidth = 2,
+  dash: readonly number[] = [],
 ) => {
   context.save();
   context.strokeStyle = color;
   context.lineWidth = lineWidth;
+  context.setLineDash([...dash]);
   context.strokeRect(rect.x, rect.y, rect.width, rect.height);
   context.restore();
 };
@@ -97,6 +99,34 @@ const drawSpoofGuide = (
   context.restore();
 };
 
+const drawPoseLabel = (
+  context: CanvasRenderingContext2D,
+  rect: Rect,
+  pose: { pitch: number; roll: number; yaw: number },
+) => {
+  const ratio = getCanvasPixelRatio();
+  const text = `yaw ${pose.yaw.toFixed(2)} pitch ${pose.pitch.toFixed(2)} roll ${pose.roll.toFixed(2)}`;
+  const fontSize = 11 * ratio;
+  const padding = 6 * ratio;
+
+  context.save();
+  context.font = `600 ${fontSize}px monospace`;
+  const width = context.measureText(text).width + padding * 2;
+  const height = fontSize + padding * 2;
+  const x = clamp(rect.x, 4 * ratio, Math.max(4 * ratio, context.canvas.width - width - 4 * ratio));
+  const y = clamp(
+    rect.y + rect.height + 6 * ratio,
+    4 * ratio,
+    Math.max(4 * ratio, context.canvas.height - height - 4 * ratio),
+  );
+
+  context.fillStyle = 'rgba(0, 0, 0, 0.68)';
+  context.fillRect(x, y, width, height);
+  context.fillStyle = 'rgba(180, 245, 255, 0.96)';
+  context.fillText(text, x + padding, y + padding + fontSize * 0.78);
+  context.restore();
+};
+
 const drawSnapshot = (
   canvas: HTMLCanvasElement,
   context: CanvasRenderingContext2D,
@@ -118,23 +148,50 @@ const drawSnapshot = (
     options,
   );
 
-  if (diagnostics.detection?.box) {
-    const detectionRect = mapper.mapRect(diagnostics.detection.box);
+  if (diagnostics.mesh?.landmarks) {
+    drawLandmarks(context, diagnostics.mesh.landmarks, mapper);
+  }
 
+  let fitRect: Rect | null = null;
+  if (diagnostics.faceFit?.comparisonBox) {
+    fitRect = mapper.mapRect(diagnostics.faceFit.comparisonBox);
     drawRect(
       context,
-      detectionRect,
-      diagnostics.faceFit?.isAligned ? 'rgba(70, 230, 160, 0.95)' : 'rgba(255, 210, 80, 0.95)',
+      fitRect,
+      diagnostics.faceFit.isAligned ? 'rgba(70, 230, 160, 0.95)' : 'rgba(80, 225, 255, 0.95)',
       2,
     );
 
-    if (diagnostics.spoof) {
-      drawSpoofGuide(context, detectionRect, diagnostics.spoof);
+    if (diagnostics.mesh?.geometry.pose) {
+      drawPoseLabel(context, fitRect, diagnostics.mesh.geometry.pose);
     }
   }
 
-  if (diagnostics.mesh?.landmarks) {
-    drawLandmarks(context, diagnostics.mesh.landmarks, mapper);
+  if (diagnostics.mesh?.geometry.anchorBox) {
+    drawRect(
+      context,
+      mapper.mapRect(diagnostics.mesh.geometry.anchorBox),
+      'rgba(80, 150, 255, 0.9)',
+      1,
+    );
+  }
+
+  const detectionRect = diagnostics.detection?.box ? mapper.mapRect(diagnostics.detection.box) : null;
+  if (!fitRect && detectionRect) {
+    drawRect(
+      context,
+      detectionRect,
+      'rgba(255, 210, 80, 0.72)',
+      1,
+      [6, 4],
+    );
+  }
+
+  if (diagnostics.spoof) {
+    const spoofRect = fitRect ?? detectionRect;
+    if (spoofRect) {
+      drawSpoofGuide(context, spoofRect, diagnostics.spoof);
+    }
   }
 };
 

@@ -1,5 +1,6 @@
 export {
   attachIoMetadata,
+  createOnnxBlendshapeAdapter,
   createOnnxDetectorAdapter,
   createOnnxMeshAdapter,
   createOnnxSpoofAdapter,

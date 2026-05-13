@@ -1,7 +1,7 @@
 import type { RuntimeVerificationCheck } from './config.js';
-import type { FaceDetectionResult, FaceMeshResult, Rect, SpoofFrameResult } from './result.js';
+import type { FaceDetectionResult, FaceMeshResult, SpoofFrameResult } from './result.js';
 
-export type ModelCapability = 'detector' | 'mesh' | 'spoof';
+export type ModelCapability = 'detector' | 'mesh' | 'blendshape' | 'spoof';
 
 export type ModelOverrides = Partial<Record<ModelCapability, string>> & {
   [modelId: string]: string | undefined;
@@ -40,7 +40,6 @@ export interface DetectorRawResult {
 }
 
 export interface MeshRawInput {
-  crop: Rect;
   image: Float32Array;
 }
 
@@ -48,6 +47,11 @@ export interface MeshRawResult {
   landmarks: Float32Array;
   runMs: number;
   score: number;
+}
+
+export interface BlendshapeRawResult {
+  runMs: number;
+  scores: Float32Array;
 }
 
 export interface SpoofRawResult {
@@ -71,6 +75,15 @@ export interface MeshAdapter {
   };
   dispose(): Promise<void>;
   run(input: MeshRawInput): Promise<MeshRawResult | null>;
+}
+
+export interface BlendshapeAdapter {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
+  };
+  dispose(): Promise<void>;
+  run(input: Float32Array): Promise<BlendshapeRawResult | null>;
 }
 
 export interface SpoofAdapter {
@@ -103,6 +116,7 @@ export interface MeshPipeline {
     detection: FaceDetectionResult,
     options: { roiExpandFactor: number },
   ): Promise<FaceMeshResult | null>;
+  reset?(): void;
 }
 
 export interface SpoofPipeline {
