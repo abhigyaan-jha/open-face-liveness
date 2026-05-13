@@ -1,11 +1,8 @@
-import type { Rect } from '../result.js';
+import type { FrameSize, Rect } from '../result.js';
 
 export type FrameDisplayFit = 'contain' | 'cover' | 'fill';
 
-export interface FrameSize {
-  height: number;
-  width: number;
-}
+export type { FrameSize } from '../result.js';
 
 export interface Point2D {
   x: number;

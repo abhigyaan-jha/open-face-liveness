@@ -133,6 +133,3 @@ export const loadModelRuntime = async (
     spoof,
   };
 };
-
-/** @deprecated Use loadModelRuntime instead. */
-export const loadPhaseOneRuntime = loadModelRuntime;
