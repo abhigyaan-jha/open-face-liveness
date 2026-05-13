@@ -1,16 +1,30 @@
-import type { VerificationContext, VerificationStage } from '../events.js';
+import {
+  VERIFICATION_STAGES,
+  type VerificationContext,
+  type VerificationStage,
+} from '../events.js';
 
 interface VerificationMachineSnapshotLike {
   context?: unknown;
   value: unknown;
 }
 
+const verificationStages: ReadonlySet<string> = new Set(VERIFICATION_STAGES);
+
+const isVerificationStage = (value: unknown): value is VerificationStage =>
+  typeof value === 'string' && verificationStages.has(value);
+
 export const getStageFromSnapshot = (snapshot: VerificationMachineSnapshotLike): VerificationStage => {
-  if (snapshot.value && typeof snapshot.value === 'object' && 'running' in snapshot.value) {
-    return String(snapshot.value.running) as VerificationStage;
+  const stage =
+    snapshot.value && typeof snapshot.value === 'object' && 'running' in snapshot.value
+      ? snapshot.value.running
+      : snapshot.value;
+
+  if (isVerificationStage(stage)) {
+    return stage;
   }
 
-  return String(snapshot.value) as VerificationStage;
+  throw new Error(`Unknown verification stage from machine snapshot: ${String(stage)}`);
 };
 
 export const createVerificationSnapshot = <TVideo>(

@@ -170,17 +170,13 @@ cleanup?.();
 
 ## Results
 
-`VerificationResult` is intentionally module-shaped:
+`VerificationResult` is exported from the package. Import the canonical type
+instead of recreating the shape in app or demo code:
 
 ```ts
-type VerificationResult = {
-  checks: readonly ('face' | 'liveness' | 'light' | 'spoof')[];
-  completedAt: number;
-  face: FaceVerificationResult | null;
-  liveness: LivenessChallengeResult | null;
-  light: LightTestResult | null;
-  spoof: SpoofSummaryResult | null;
-};
+import type { VerificationResult } from 'web-verify';
+
+const result: VerificationResult = await verifier.verify(video);
 ```
 
 Face output includes detector score, mesh landmarks, fit checks, and stability.

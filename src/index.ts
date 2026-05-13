@@ -50,6 +50,7 @@ export type {
   VerificationSnapshot,
   VerificationStage,
 } from './events.js';
+export { VERIFICATION_STAGES } from './events.js';
 export {
   VerificationError,
   isVerificationError,

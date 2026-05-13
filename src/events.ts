@@ -21,19 +21,22 @@ import type {
   VerificationResult,
 } from './result.js';
 
-export type VerificationStage =
-  | 'idle'
-  | 'booting'
-  | 'requestingCamera'
-  | 'loadingModels'
-  | 'acquiringFace'
-  | 'stabilizingFace'
-  | 'faceReady'
-  | 'livenessChallenge'
-  | 'lightChallenge'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+export const VERIFICATION_STAGES = [
+  'idle',
+  'booting',
+  'requestingCamera',
+  'loadingModels',
+  'acquiringFace',
+  'stabilizingFace',
+  'faceReady',
+  'livenessChallenge',
+  'lightChallenge',
+  'completed',
+  'failed',
+  'cancelled',
+] as const;
+
+export type VerificationStage = (typeof VERIFICATION_STAGES)[number];
 
 export interface FrameTimings {
   detectorMs: number | null;
