@@ -275,19 +275,4 @@ pitchDeltaLimit = challengePitchLimit - neutralAbsolutePitchLimit
 Each success must dwell for the configured challenge dwell time before the step
 is completed.
 
-## Debug Overlay Meaning
-
-Code: [`../draw/diagnostics.ts`](../draw/diagnostics.ts)
-
-When debug overlay is on:
-
-```txt
-green/cyan rectangle = landmark fit box used for UX face-fit decisions
-blue rectangle       = upper/mid-face anchor used for stability/drift
-white dots           = smoothed mesh landmarks
-pose label           = geometry yaw/pitch/roll
-yellow dashed box    = detector box, only shown when no fit box exists
-```
-
-Detector still exists, but only for acquisition, mesh crop proposal, recovery,
-spoof, and light helpers. It is not the source of truth for liveness face fit.
+Debug overlay rendering is documented in [`../draw/README.md`](../draw/README.md).
