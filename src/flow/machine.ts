@@ -95,7 +95,7 @@ const toErrorMessage = (error: unknown): string => {
 
 const getEventError = (event: unknown): string => {
   if (event && typeof event === 'object' && 'error' in event) {
-    return toErrorMessage((event as { error: unknown }).error);
+    return toErrorMessage(event.error);
   }
 
   return 'Verification failed. Please try again.';

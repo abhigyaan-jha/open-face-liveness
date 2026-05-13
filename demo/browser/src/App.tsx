@@ -632,7 +632,7 @@ export const App = function App() {
     setVerificationOpen(nextOpen);
     if (!nextOpen) {
       setStartOnOpen(false);
-      disposeSession();
+      void disposeSession();
     }
   }, [disposeSession]);
 

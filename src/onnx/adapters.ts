@@ -62,7 +62,7 @@ const hasNumericTensorData = (tensor: unknown): tensor is NumericTensor => {
     return false;
   }
 
-  const length = Number((data as { length: unknown }).length);
+  const length = Number(data.length);
   if (!Number.isFinite(length)) {
     return false;
   }
@@ -204,7 +204,7 @@ export const createOnnxDetectorAdapter = async (
         [inputName]: new ort.Tensor('float32', input, [1, 128, 128, 3]),
       });
 
-      const merged = mergeDetectorOutputs(outputs as Record<string, unknown>, outputNames);
+      const merged = mergeDetectorOutputs(outputs, outputNames);
 
       return {
         boxes: merged.boxes,

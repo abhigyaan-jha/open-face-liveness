@@ -274,8 +274,8 @@ demo/browser/      browser demo application
 
 ```sh
 bun install
-bun test
 bun run typecheck
+bun run lint
 bun run build
 bun run package:audit
 bun run demo

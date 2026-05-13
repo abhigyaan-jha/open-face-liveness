@@ -158,7 +158,7 @@ export interface CheckConfig {
   spoof: boolean;
 }
 
-export interface ModelConfig extends VerificationModelsOptions {}
+export type ModelConfig = VerificationModelsOptions;
 
 export interface DebugConfig {
   overlay: boolean;

@@ -84,10 +84,10 @@
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "demo": "vite --host 127.0.0.1",
+    "lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"demo/browser/src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" vite.config.ts eslint.config.js",
     "package:audit": "node scripts/audit-package.mjs",
     "pack:dry-run": "npm pack --dry-run",
-    "prepack": "npm run build && npm run typecheck && npm test && npm run package:audit",
-    "test": "bun test --pass-with-no-tests",
+    "prepack": "npm run typecheck && npm run lint && npm run build && npm run package:audit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -95,14 +95,19 @@
     "xstate": "^5.31.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "^1.3.13",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.6.0",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.3",
     "vite": "^8.0.12"
   },
   "keywords": [

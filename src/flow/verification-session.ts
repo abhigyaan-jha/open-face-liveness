@@ -80,7 +80,7 @@ interface LivenessCompletionHold {
 
 interface PendingStart {
   promise: Promise<VerificationResult>;
-  reject(error: unknown): void;
+  reject: (error: unknown) => void;
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
@@ -116,7 +116,15 @@ const getSnapshotErrorCode = (snapshot: WebVerificationSnapshot): VerificationEr
     return snapshot.errorDetail.code;
   }
 
-  switch (snapshot.lastEvent?.type) {
+  if (snapshot.lastEvent?.type === 'STOP') {
+    return 'session.cancelled';
+  }
+
+  if (!snapshot.lastEvent || !('error' in snapshot.lastEvent)) {
+    return 'unknown';
+  }
+
+  switch (snapshot.lastEvent.type) {
     case 'CAMERA_DENIED':
       return 'camera.permission_denied';
     case 'CAMERA_LOST':
@@ -125,10 +133,6 @@ const getSnapshotErrorCode = (snapshot: WebVerificationSnapshot): VerificationEr
       return 'models.load_failed';
     case 'ERROR':
       return 'analysis.failed';
-    case 'STOP':
-      return 'session.cancelled';
-    default:
-      return 'unknown';
   }
 };
 

@@ -1073,11 +1073,11 @@ const sampleLightTestPixels = async ({
       );
       totalPixels += imageData.width * imageData.height;
       regions.push({
-        data: imageData.data.buffer as ArrayBuffer,
+        data: imageData.data.buffer,
         height: imageData.height,
         width: imageData.width,
       });
-      transfer.push(imageData.data.buffer as ArrayBuffer);
+      transfer.push(imageData.data.buffer);
     } catch (cause) {
       throw createLightError(
         'light.sample_failed',

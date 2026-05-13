@@ -53,11 +53,15 @@ export interface WebVerifyClient {
 const CHECK_ORDER: readonly VerificationCheck[] = ['face', 'liveness', 'light', 'spoof'];
 const BASE_RUNTIME_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh'];
 
+const isCheckSelectionList = (
+  checks: WebVerifyCheckSelection | undefined,
+): checks is readonly VerificationCheck[] => Array.isArray(checks);
+
 const resolveCheckSelection = (
   checks: WebVerifyCheckSelection | undefined,
   fallback: CheckConfig,
 ): VerificationCheck[] => {
-  if (Array.isArray(checks)) {
+  if (isCheckSelectionList(checks)) {
     return [...checks];
   }
 
@@ -119,7 +123,7 @@ const normalizeOverrides = (
 
   return Object.fromEntries(
     Object.entries(overrides).sort(([left], [right]) => left.localeCompare(right)),
-  ) as VerificationModelsOptions['overrides'];
+  );
 };
 
 const createRuntimeKey = (models: VerificationModelsOptions): string =>

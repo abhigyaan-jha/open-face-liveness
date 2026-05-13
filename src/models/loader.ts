@@ -99,9 +99,10 @@ export const loadModelRuntime = async (
 
       if (failedSpoofModels.length || spoofAdapters.length !== spoofModels.length) {
         await disposeSpoofAdapters(spoofAdapters);
+        const failedSpoofReasons = failedSpoofModels.map((result): unknown => result.reason);
         throw createRequiredSpoofUnavailableError(
           'Required spoof check could not be initialized.',
-          failedSpoofModels.map((result) => result.reason),
+          failedSpoofReasons,
         );
       }
     }
