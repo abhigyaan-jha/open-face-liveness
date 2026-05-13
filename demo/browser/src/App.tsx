@@ -7,7 +7,16 @@ import {
   MoveUp,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+  type SyntheticEvent,
+} from 'react';
 import {
   createLightSequence,
   createLivenessSequence,
@@ -22,8 +31,13 @@ import type { FrameSize, LivenessChallengeDirection, Rect } from '../../../src/r
 import { createFrameToDisplayMapper } from '../../../src/capture/geometry.js';
 import { mountDiagnosticsOverlay } from '../../../src/draw/index.js';
 import { DEMO_ASSET_CONFIG } from './env.js';
-
-type OverlayPhase = 'detecting' | 'idle' | 'recentering' | 'stabilizing' | 'success';
+import {
+  getGuideClasses,
+  getSnapshotRenderKey,
+  getSnapshotStatusKey,
+  isSnapshotSuccess,
+  SNAPSHOT_DEBUG_RENDER_INTERVAL_MS,
+} from './snapshot-view.js';
 
 const verifier = createWebVerifyClient({
   models: {
@@ -55,73 +69,32 @@ const getErrorMessage = (error: unknown): string => {
     : 'Verification failed.';
 };
 
-const getOverlayPhase = (snapshot: WebVerificationSnapshot | null): OverlayPhase => {
-  if (snapshot?.stage === 'lightChallenge') {
-    return snapshot.light?.phase === 'complete' ? 'success' : 'stabilizing';
-  }
+const DIRECTION_ARROW_ICONS = {
+  down: MoveDown,
+  left: MoveLeft,
+  right: MoveRight,
+  up: MoveUp,
+} satisfies Record<Exclude<LivenessChallengeDirection, 'none'>, typeof MoveDown>;
 
-  switch (snapshot?.liveness?.phase) {
-    case 'active':
-      return 'detecting';
-    case 'celebrating':
-    case 'complete':
-      return 'success';
-    case 'recentering':
-      return 'recentering';
-    case 'stabilizing':
-      return 'stabilizing';
-    case 'idle':
-    case undefined:
-      break;
-  }
-
-  if (snapshot?.stage === 'completed') {
-    return 'success';
-  }
-
-  if (snapshot?.stage === 'requestingCamera' || snapshot?.stage === 'loadingModels') {
-    return 'stabilizing';
-  }
-
-  if (snapshot?.stage === 'stabilizingFace') {
-    return 'recentering';
-  }
-
-  if (snapshot?.stage === 'acquiringFace' || snapshot?.stage === 'faceReady') {
-    return 'detecting';
-  }
-
-  return 'idle';
-};
-
-const getGuideClasses = (phase: OverlayPhase): string => {
-  switch (phase) {
-    case 'stabilizing':
-      return 'face-guide-base face-guide-stabilizing';
-    case 'detecting':
-      return 'face-guide-base face-guide-detecting';
-    case 'recentering':
-      return 'face-guide-base face-guide-recentering';
-    case 'success':
-      return 'face-guide-base face-guide-success';
-    case 'idle':
-    default:
-      return 'face-guide-base face-guide-idle';
-  }
-};
+const DIRECTION_ARROW_OFFSETS = {
+  down: 'translateY(15px)',
+  left: 'translateX(-15px)',
+  right: 'translateX(15px)',
+  up: 'translateY(-15px)',
+} satisfies Record<Exclude<LivenessChallengeDirection, 'none'>, string>;
 
 const UnifiedOverlay = ({
   guideRect,
-  phase,
+  snapshot,
   showDarkOverlay,
   showFaceGuide = true,
 }: {
   guideRect: Rect | null;
-  phase: OverlayPhase;
+  snapshot: WebVerificationSnapshot | null;
   showDarkOverlay: boolean;
   showFaceGuide?: boolean;
 }) => {
-  const showSuccess = phase === 'success';
+  const showSuccess = isSnapshotSuccess(snapshot);
   const guideStyle = guideRect
     ? {
         height: `${guideRect.height}px`,
@@ -141,7 +114,7 @@ const UnifiedOverlay = ({
 
       {showFaceGuide && guideStyle ? (
         <div className="absolute-fill">
-          <div className={getGuideClasses(phase)} data-testid="face-guide" style={guideStyle} />
+          <div className={getGuideClasses(snapshot)} data-testid="face-guide" style={guideStyle} />
         </div>
       ) : null}
 
@@ -161,23 +134,11 @@ const DirectionalArrow = ({ direction }: { direction: LivenessChallengeDirection
     return null;
   }
 
-  const icons = {
-    down: MoveDown,
-    left: MoveLeft,
-    right: MoveRight,
-    up: MoveUp,
-  };
-  const offsets = {
-    down: 'translateY(15px)',
-    left: 'translateX(-15px)',
-    right: 'translateX(15px)',
-    up: 'translateY(-15px)',
-  };
-  const Icon = icons[direction];
+  const Icon = DIRECTION_ARROW_ICONS[direction];
 
   return (
     <div className="direction-arrow-layer" data-testid={`arrow-${direction}`}>
-      <div className="direction-arrow" style={{ '--arrow-offset': offsets[direction] } as React.CSSProperties}>
+      <div className="direction-arrow" style={{ '--arrow-offset': DIRECTION_ARROW_OFFSETS[direction] } as React.CSSProperties}>
         <Icon strokeWidth={2} />
       </div>
     </div>
@@ -195,7 +156,7 @@ const VerificationCamera = ({
   centerContent?: ReactNode;
   direction?: LivenessChallengeDirection;
   overlay: {
-    phase: OverlayPhase;
+    snapshot: WebVerificationSnapshot | null;
     showDarkOverlay: boolean;
     showFaceGuide: boolean;
   };
@@ -302,6 +263,20 @@ const ResultCard = ({
   </section>
 );
 
+const RawResultJson = ({ result }: { result: VerificationResult }) => {
+  const [open, setOpen] = useState(false);
+  const handleToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
+    setOpen(event.currentTarget.open);
+  }, []);
+
+  return (
+    <details className="raw-result" onToggle={handleToggle}>
+      <summary>Raw result JSON</summary>
+      {open ? <pre>{JSON.stringify(result, null, 2)}</pre> : null}
+    </details>
+  );
+};
+
 const VerificationResults = ({ result }: { result: VerificationResult | null }) => {
   if (!result) {
     return null;
@@ -392,10 +367,7 @@ const VerificationResults = ({ result }: { result: VerificationResult | null }) 
         </section>
       ) : null}
 
-      <details className="raw-result">
-        <summary>Raw result JSON</summary>
-        <pre>{JSON.stringify(result, null, 2)}</pre>
-      </details>
+      <RawResultJson result={result} />
     </>
   );
 };
@@ -467,6 +439,11 @@ export const App = function App() {
   const [debugEnabled, setDebugEnabled] = useState(false);
   const diagnosticsOverlayRef = useRef<HTMLDivElement>(null);
   const diagnosticsOverlayCleanupRef = useRef<(() => void) | null>(null);
+  const activeVerificationRef = useRef<Promise<VerificationResult> | null>(null);
+  const latestSnapshotRef = useRef<WebVerificationSnapshot | null>(null);
+  const renderedSnapshotKeyRef = useRef('');
+  const renderedSnapshotStatusKeyRef = useRef('');
+  const lastDebugSnapshotRenderAtRef = useRef(0);
   const sessionRef = useRef<VerificationSession | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -502,16 +479,12 @@ export const App = function App() {
     );
   }, [cleanupDiagnosticsOverlay, debugEnabled]);
 
-  const attachActiveSession = useCallback(() => {
-    mountActiveDiagnosticsOverlay();
-  }, [mountActiveDiagnosticsOverlay]);
-
   const setVideoElement = useCallback((video: HTMLVideoElement | null) => {
     videoRef.current = video;
     setVideoElementReady(Boolean(video));
   }, []);
 
-  const updateVideoFrameSize = () => {
+  const updateVideoFrameSize = useCallback(() => {
     const video = videoRef.current;
     if (!video?.videoWidth || !video.videoHeight) {
       return;
@@ -521,22 +494,65 @@ export const App = function App() {
       height: video.videoHeight,
       width: video.videoWidth,
     });
-  };
+  }, []);
+
+  const clearSnapshot = useCallback(() => {
+    latestSnapshotRef.current = null;
+    renderedSnapshotKeyRef.current = '';
+    renderedSnapshotStatusKeyRef.current = '';
+    lastDebugSnapshotRenderAtRef.current = 0;
+    setSnapshot(null);
+  }, []);
+
+  const publishSnapshot = useCallback((nextSnapshot: WebVerificationSnapshot, force = false) => {
+    latestSnapshotRef.current = nextSnapshot;
+
+    const nextStatusKey = getSnapshotStatusKey(nextSnapshot);
+    const nextRenderKey = getSnapshotRenderKey(nextSnapshot, debugEnabled);
+
+    if (!force && nextRenderKey === renderedSnapshotKeyRef.current) {
+      return;
+    }
+
+    const statusChanged = nextStatusKey !== renderedSnapshotStatusKeyRef.current;
+    const now = performance.now();
+    if (
+      debugEnabled &&
+      !force &&
+      !statusChanged &&
+      now - lastDebugSnapshotRenderAtRef.current < SNAPSHOT_DEBUG_RENDER_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    renderedSnapshotKeyRef.current = nextRenderKey;
+    renderedSnapshotStatusKeyRef.current = nextStatusKey;
+    lastDebugSnapshotRenderAtRef.current = now;
+    setSnapshot(nextSnapshot);
+  }, [debugEnabled]);
 
   const handleSnapshot = useCallback((nextSnapshot: WebVerificationSnapshot) => {
-    setSnapshot(nextSnapshot);
-    mountActiveDiagnosticsOverlay();
-  }, [mountActiveDiagnosticsOverlay]);
+    publishSnapshot(nextSnapshot);
 
-  const disposeSession = () => {
+    if (debugEnabled && !diagnosticsOverlayCleanupRef.current) {
+      mountActiveDiagnosticsOverlay();
+    }
+  }, [debugEnabled, mountActiveDiagnosticsOverlay, publishSnapshot]);
+
+  const disposeSession = useCallback(() => {
+    const activeVerification = activeVerificationRef.current;
+
     cleanupDiagnosticsOverlay();
     sessionRef.current = null;
     verifier.cancel();
-    setSnapshot(null);
+    clearSnapshot();
     setVideoFrameSize(null);
-  };
 
-  const startVerificationSession = async () => {
+    return activeVerification;
+  }, [cleanupDiagnosticsOverlay, clearSnapshot]);
+
+  const startVerificationSession = useCallback(async () => {
+    let verification: Promise<VerificationResult> | null = null;
     setSessionError(null);
 
     try {
@@ -544,7 +560,7 @@ export const App = function App() {
         throw new Error('Camera video element is not ready.');
       }
 
-      const verification = verifier.start({
+      verification = verifier.start({
         checks: {
           face: true,
           light: true,
@@ -566,36 +582,70 @@ export const App = function App() {
         onSnapshot: handleSnapshot,
         video: videoRef.current,
       });
-      attachActiveSession();
+      activeVerificationRef.current = verification;
       const nextResult = await verification;
 
       setResult(nextResult);
     } catch (error) {
       setSessionError(getErrorMessage(error));
+    } finally {
+      if (verification && activeVerificationRef.current === verification) {
+        activeVerificationRef.current = null;
+      }
     }
-  };
+  }, [debugEnabled, handleSnapshot]);
 
-  const restartVerificationSession = () => {
-    disposeSession();
-    void startVerificationSession();
-  };
+  const restartVerificationSession = useCallback(() => {
+    const activeVerification = disposeSession();
+    const startNextSession = () => {
+      void startVerificationSession();
+    };
 
-  const startFreshVerification = () => {
-    disposeSession();
+    if (!activeVerification) {
+      startNextSession();
+      return;
+    }
+
+    void activeVerification.catch(() => {}).finally(startNextSession);
+  }, [disposeSession, startVerificationSession]);
+
+  const startFreshVerification = useCallback(() => {
+    const activeVerification = disposeSession();
+    const queueStart = () => setStartOnOpen(true);
+
     setActivePage('home');
     setResult(null);
     setSessionError(null);
-    setStartOnOpen(true);
     setVerificationOpen(true);
-  };
 
-  const handleVerificationOpenChange = (nextOpen: boolean) => {
+    if (!activeVerification) {
+      queueStart();
+      return;
+    }
+
+    void activeVerification.catch(() => {}).finally(queueStart);
+  }, [disposeSession]);
+
+  const handleVerificationOpenChange = useCallback((nextOpen: boolean) => {
     setVerificationOpen(nextOpen);
     if (!nextOpen) {
       setStartOnOpen(false);
       disposeSession();
     }
-  };
+  }, [disposeSession]);
+
+  const closeVerification = useCallback(() => {
+    handleVerificationOpenChange(false);
+  }, [handleVerificationOpenChange]);
+
+  const handleDebugEnabledChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setDebugEnabled(event.currentTarget.checked);
+  }, []);
+
+  const handleResultsClick = useCallback(() => {
+    setVerificationOpen(false);
+    setActivePage('results');
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -611,13 +661,19 @@ export const App = function App() {
   }, [cleanupDiagnosticsOverlay, mountActiveDiagnosticsOverlay, verificationOpen]);
 
   useEffect(() => {
+    if (latestSnapshotRef.current) {
+      publishSnapshot(latestSnapshotRef.current, true);
+    }
+  }, [debugEnabled, publishSnapshot]);
+
+  useEffect(() => {
     if (!verificationOpen || !startOnOpen || !videoElementReady) {
       return;
     }
 
     setStartOnOpen(false);
     void startVerificationSession();
-  }, [verificationOpen, startOnOpen, videoElementReady]);
+  }, [startVerificationSession, verificationOpen, startOnOpen, videoElementReady]);
 
   const canRetry = snapshot?.stage === 'failed' || snapshot?.stage === 'cancelled' || Boolean(sessionError);
   const isPreparing =
@@ -638,15 +694,58 @@ export const App = function App() {
       ),
   );
   const shouldShowGuide = verificationOpen && (isPreparing || isScanning);
-  const overlayPhase = getOverlayPhase(snapshot);
-  const challengeDirection = snapshot?.liveness?.direction ?? 'none';
+  const liveness = snapshot?.liveness ?? null;
+  const light = snapshot?.light ?? null;
+  const challengeDirection = liveness?.direction ?? 'none';
   const instruction =
-    snapshot?.light?.instruction ||
-    snapshot?.liveness?.instruction ||
+    light?.instruction ||
+    liveness?.instruction ||
     snapshot?.instruction ||
     'Preparing verification...';
   const currentError = sessionError ?? snapshot?.error ?? null;
   const resultsAvailable = Boolean(result);
+  const cameraOverlay = useMemo(() => ({
+    snapshot,
+    showDarkOverlay: shouldShowGuide && !debugEnabled,
+    showFaceGuide: shouldShowGuide,
+  }), [debugEnabled, shouldShowGuide, snapshot]);
+  const cameraCenterContent = useMemo(() => (
+    isPreparing ? (
+      <div>
+        <Camera aria-hidden="true" />
+        <p>Initializing...</p>
+      </div>
+    ) : null
+  ), [isPreparing]);
+  const statusContent = useMemo(() => (
+    <>
+      <p className="status-title" id="dialog-title">{instruction}</p>
+      {liveness ? (
+        <p className="status-subtitle">
+          Step {liveness.currentStep || 1}/{liveness.totalSteps}
+          {debugEnabled ? ` ${Math.round(liveness.progress * 100)}%` : null}
+        </p>
+      ) : null}
+      {light ? (
+        <p className="status-subtitle">
+          Light {Math.min(light.colorIndex + 1, light.totalSteps)}/{light.totalSteps}
+          {debugEnabled ? ` ${Math.round(light.progress * 100)}%` : null}
+        </p>
+      ) : null}
+    </>
+  ), [debugEnabled, instruction, light, liveness]);
+  const videoChildren = useMemo(() => (
+    <>
+      <video
+        autoPlay
+        muted
+        onLoadedMetadata={updateVideoFrameSize}
+        playsInline
+        ref={setVideoElement}
+      />
+      <div aria-hidden="true" className="diagnostics-overlay" ref={diagnosticsOverlayRef} />
+    </>
+  ), [setVideoElement, updateVideoFrameSize]);
 
   return (
     <main className="page">
@@ -654,10 +753,7 @@ export const App = function App() {
         <button
           className="btn-primary btn-inline"
           disabled={!resultsAvailable}
-          onClick={() => {
-            setVerificationOpen(false);
-            setActivePage('results');
-          }}
+          onClick={handleResultsClick}
           type="button"
         >
           Results
@@ -672,7 +768,7 @@ export const App = function App() {
           <label className="toggle-row">
             <input
               checked={debugEnabled}
-              onChange={(event) => setDebugEnabled(event.target.checked)}
+              onChange={handleDebugEnabledChange}
               type="checkbox"
             />
             Debug diagnostics
@@ -695,58 +791,20 @@ export const App = function App() {
 
       {verificationOpen ? (
         <>
-          <div className="dialog-overlay" onClick={() => handleVerificationOpenChange(false)} />
+          <div className="dialog-overlay" onClick={closeVerification} />
           <section className="dialog-content" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-            <button className="dialog-close" onClick={() => handleVerificationOpenChange(false)} type="button">
+            <button className="dialog-close" onClick={closeVerification} type="button">
               <X aria-hidden="true" />
               <span className="sr-only">Close</span>
             </button>
 
             <VerificationCamera
-              centerContent={
-                isPreparing ? (
-                  <div>
-                    <Camera aria-hidden="true" />
-                    <p>Initializing...</p>
-                  </div>
-                ) : null
-              }
+              centerContent={cameraCenterContent}
               direction={challengeDirection}
-              overlay={{
-                phase: overlayPhase,
-                showDarkOverlay: shouldShowGuide && !debugEnabled,
-                showFaceGuide: shouldShowGuide,
-              }}
-              statusContent={
-                <>
-                  <p className="status-title" id="dialog-title">{instruction}</p>
-                  {snapshot?.liveness ? (
-                    <p className="status-subtitle">
-                      Step {snapshot.liveness.currentStep || 1}/{snapshot.liveness.totalSteps}
-                      {debugEnabled ? ` ${Math.round(snapshot.liveness.progress * 100)}%` : null}
-                    </p>
-                  ) : null}
-                  {snapshot?.light ? (
-                    <p className="status-subtitle">
-                      Light {Math.min(snapshot.light.colorIndex + 1, snapshot.light.totalSteps)}/{snapshot.light.totalSteps}
-                      {debugEnabled ? ` ${Math.round(snapshot.light.progress * 100)}%` : null}
-                    </p>
-                  ) : null}
-                </>
-              }
+              overlay={cameraOverlay}
+              statusContent={statusContent}
               videoFrameSize={videoFrameSize}
-              videoChildren={
-                <>
-                  <video
-                    autoPlay
-                    muted
-                    onLoadedMetadata={updateVideoFrameSize}
-                    playsInline
-                    ref={setVideoElement}
-                  />
-                  <div aria-hidden="true" className="diagnostics-overlay" ref={diagnosticsOverlayRef} />
-                </>
-              }
+              videoChildren={videoChildren}
             />
 
             <LiveDebugPanel debugEnabled={debugEnabled} snapshot={snapshot} />
