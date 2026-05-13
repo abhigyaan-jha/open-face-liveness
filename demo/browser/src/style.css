@@ -437,6 +437,12 @@ button:disabled {
   margin: -16px 0 0;
 }
 
+.result-note {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin: -6px 0 12px;
+}
+
 .result-grid {
   display: grid;
   gap: 12px;
@@ -522,6 +528,52 @@ button:disabled {
   width: 12px;
 }
 
+.light-selfie-list {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.light-selfie-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  margin: 0;
+  overflow: hidden;
+}
+
+.light-selfie-image {
+  aspect-ratio: 16 / 9;
+  background: var(--camera);
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.light-selfie-caption {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+
+.light-selfie-title {
+  align-items: center;
+  color: var(--foreground);
+  display: flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  margin: 0;
+}
+
+.light-selfie-meta {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin: 0;
+}
+
 .raw-result summary {
   cursor: pointer;
   font-size: 14px;
@@ -581,7 +633,8 @@ button:disabled {
   }
 
   .result-grid,
-  .step-list {
+  .step-list,
+  .light-selfie-list {
     grid-template-columns: 1fr;
   }
 }

@@ -48,6 +48,21 @@ const verifier = createWebVerifyClient({
   },
 });
 
+const DEMO_LIGHT_SAMPLE_CAPTURE_PROGRESS = 0.5;
+const DEMO_LIGHT_SELFIE_MIME_TYPE = 'image/jpeg';
+const DEMO_LIGHT_SELFIE_QUALITY = 0.86;
+
+type DemoLightSampleSelfie = {
+  capturedAt: number;
+  colorCss: string | null;
+  colorId: string | null;
+  colorIndex: number | null;
+  colorLabel: string;
+  imageDataUrl: string;
+  key: string;
+  sampleRects: readonly Rect[];
+};
+
 const formatNumber = (value: number | null | undefined, digits = 3): string =>
   Number.isFinite(value) ? Number(value).toFixed(digits) : '-';
 
@@ -69,6 +84,107 @@ const getErrorMessage = (error: unknown): string => {
   return typeof error === 'string' && error.length > 0
     ? error
     : 'Verification failed.';
+};
+
+const getLightStepProgress = (snapshot: WebVerificationSnapshot): number => {
+  const light = snapshot.light;
+  if (!light || light.totalSteps <= 0) {
+    return 0;
+  }
+
+  const rawStepProgress = light.progress * light.totalSteps - light.colorIndex;
+  return Math.min(1, Math.max(0, rawStepProgress));
+};
+
+const drawLightSampleRects = (
+  context: CanvasRenderingContext2D,
+  sampleRects: readonly Rect[],
+  frameWidth: number,
+) => {
+  const lineWidth = Math.max(2, Math.round(frameWidth * 0.004));
+  const fontSize = Math.max(13, Math.round(frameWidth * 0.022));
+  const paddingX = Math.max(5, Math.round(frameWidth * 0.008));
+  const paddingY = Math.max(4, Math.round(frameWidth * 0.006));
+
+  context.save();
+  context.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
+  context.lineWidth = lineWidth;
+  context.strokeStyle = 'rgba(80, 230, 255, 0.98)';
+  context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+
+  for (const rect of sampleRects) {
+    const x = frameWidth - rect.x - rect.width;
+    const y = rect.y;
+    const label = rect.label ?? 'sample';
+    const textWidth = context.measureText(label).width;
+    const labelWidth = textWidth + paddingX * 2;
+    const labelHeight = fontSize + paddingY * 2;
+    const labelY = Math.max(0, y - labelHeight - lineWidth);
+
+    context.strokeRect(x, y, rect.width, rect.height);
+    context.fillRect(x, labelY, labelWidth, labelHeight);
+    context.fillStyle = 'rgba(180, 245, 255, 0.98)';
+    context.fillText(label, x + paddingX, labelY + paddingY + fontSize * 0.78);
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  }
+
+  context.restore();
+};
+
+const captureDemoLightSampleSelfie = (
+  video: HTMLVideoElement,
+  snapshot: WebVerificationSnapshot,
+): DemoLightSampleSelfie | null => {
+  const light = snapshot.light;
+  if (
+    snapshot.stage !== 'lightChallenge' ||
+    !light ||
+    light.completed ||
+    !video.videoWidth ||
+    !video.videoHeight ||
+    !light.sampleRects.length
+  ) {
+    return null;
+  }
+
+  const color = light.activeColor;
+  const isBaselineCapture =
+    light.phase === 'baseline' &&
+    light.progress >= DEMO_LIGHT_SAMPLE_CAPTURE_PROGRESS;
+  const isColorCapture =
+    light.phase === 'color-wait' &&
+    !!color &&
+    getLightStepProgress(snapshot) >= DEMO_LIGHT_SAMPLE_CAPTURE_PROGRESS;
+
+  if (!isBaselineCapture && !isColorCapture) {
+    return null;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.save();
+  context.translate(canvas.width, 0);
+  context.scale(-1, 1);
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  context.restore();
+  drawLightSampleRects(context, light.sampleRects, canvas.width);
+
+  return {
+    capturedAt: snapshot.diagnostics?.timestamp ?? performance.now(),
+    colorCss: color?.css ?? null,
+    colorId: color?.id ?? null,
+    colorIndex: color ? light.colorIndex : null,
+    colorLabel: color?.label ?? 'Baseline',
+    imageDataUrl: canvas.toDataURL(DEMO_LIGHT_SELFIE_MIME_TYPE, DEMO_LIGHT_SELFIE_QUALITY),
+    key: color ? `color:${light.colorIndex}:${color.id}` : 'baseline',
+    sampleRects: light.sampleRects.map((rect) => ({ ...rect })),
+  };
 };
 
 const DIRECTION_ARROW_ICONS = {
@@ -279,7 +395,13 @@ const RawResultJson = ({ result }: { result: VerificationResult }) => {
   );
 };
 
-const VerificationResults = ({ result }: { result: VerificationResult | null }) => {
+const VerificationResults = ({
+  lightSampleSelfies,
+  result,
+}: {
+  lightSampleSelfies: readonly DemoLightSampleSelfie[];
+  result: VerificationResult | null;
+}) => {
   if (!result) {
     return null;
   }
@@ -369,6 +491,39 @@ const VerificationResults = ({ result }: { result: VerificationResult | null }) 
         </section>
       ) : null}
 
+      {lightSampleSelfies.length ? (
+        <section className="result-section">
+          <h2>Light sample screenshots</h2>
+          <p className="result-note">Boxes show the exact face regions used for HSV/color sampling.</p>
+          <div className="light-selfie-list">
+            {lightSampleSelfies.map((selfie) => (
+              <figure className="light-selfie-card" key={selfie.key}>
+                <img
+                  alt={`${selfie.colorLabel} light sample regions`}
+                  className="light-selfie-image"
+                  src={selfie.imageDataUrl}
+                />
+                <figcaption className="light-selfie-caption">
+                  <p className="light-selfie-title">
+                    {selfie.colorCss ? (
+                      <span
+                        aria-hidden="true"
+                        className="color-dot"
+                        style={{ backgroundColor: selfie.colorCss }}
+                      />
+                    ) : null}
+                    {selfie.colorIndex === null ? 'Baseline' : `${selfie.colorIndex + 1}. ${selfie.colorLabel}`}
+                  </p>
+                  <p className="light-selfie-meta">
+                    {selfie.sampleRects.map((rect) => rect.label ?? 'sample').join(', ')}
+                  </p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <RawResultJson result={result} />
     </>
   );
@@ -439,9 +594,11 @@ export const App = function App() {
   const [videoFrameSize, setVideoFrameSize] = useState<FrameSize | null>(null);
   const [videoElementReady, setVideoElementReady] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(false);
+  const [demoLightSampleSelfies, setDemoLightSampleSelfies] = useState<DemoLightSampleSelfie[]>([]);
   const diagnosticsOverlayRef = useRef<HTMLDivElement>(null);
   const diagnosticsOverlayCleanupRef = useRef<(() => void) | null>(null);
   const activeVerificationRef = useRef<Promise<VerificationResult> | null>(null);
+  const demoLightSampleSelfieKeysRef = useRef(new Set<string>());
   const latestSnapshotRef = useRef<WebVerificationSnapshot | null>(null);
   const renderedSnapshotKeyRef = useRef('');
   const renderedSnapshotStatusKeyRef = useRef('');
@@ -533,13 +690,29 @@ export const App = function App() {
     setSnapshot(nextSnapshot);
   }, [debugEnabled]);
 
+  const recordDemoLightSampleSelfie = useCallback((nextSnapshot: WebVerificationSnapshot) => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    const selfie = captureDemoLightSampleSelfie(video, nextSnapshot);
+    if (!selfie || demoLightSampleSelfieKeysRef.current.has(selfie.key)) {
+      return;
+    }
+
+    demoLightSampleSelfieKeysRef.current.add(selfie.key);
+    setDemoLightSampleSelfies((current) => [...current, selfie]);
+  }, []);
+
   const handleSnapshot = useCallback((nextSnapshot: WebVerificationSnapshot) => {
+    recordDemoLightSampleSelfie(nextSnapshot);
     publishSnapshot(nextSnapshot);
 
     if (debugEnabled && !diagnosticsOverlayCleanupRef.current) {
       mountActiveDiagnosticsOverlay();
     }
-  }, [debugEnabled, mountActiveDiagnosticsOverlay, publishSnapshot]);
+  }, [debugEnabled, mountActiveDiagnosticsOverlay, publishSnapshot, recordDemoLightSampleSelfie]);
 
   const disposeSession = useCallback(() => {
     const activeVerification = activeVerificationRef.current;
@@ -556,6 +729,8 @@ export const App = function App() {
   const startVerificationSession = useCallback(async () => {
     let verification: Promise<VerificationResult> | null = null;
     setSessionError(null);
+    setDemoLightSampleSelfies([]);
+    demoLightSampleSelfieKeysRef.current.clear();
 
     try {
       if (!videoRef.current) {
@@ -617,6 +792,8 @@ export const App = function App() {
 
     setActivePage('home');
     setResult(null);
+    setDemoLightSampleSelfies([]);
+    demoLightSampleSelfieKeysRef.current.clear();
     setSessionError(null);
     setVerificationOpen(true);
 
@@ -782,7 +959,7 @@ export const App = function App() {
           <p className="results-copy">
             Local runtime outputs from face, liveness, light, and spoof modules.
           </p>
-          <VerificationResults result={result} />
+          <VerificationResults lightSampleSelfies={demoLightSampleSelfies} result={result} />
           <div>
             <button className="btn-primary btn-inline" onClick={startFreshVerification} type="button">
               Restart verification
