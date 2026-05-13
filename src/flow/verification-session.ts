@@ -176,6 +176,7 @@ const createErrorDetail = (
 
 const createLightIlluminationController = () => {
   let element: HTMLDivElement | null = null;
+  const flashOpacity = '1';
 
   const getFlashColor = (color: LightTestColor): string =>
     `rgb(${color.rgb[0]} ${color.rgb[1]} ${color.rgb[2]})`;
@@ -217,7 +218,7 @@ const createLightIlluminationController = () => {
 
       const overlay = ensureElement();
       overlay.style.backgroundColor = getFlashColor(color);
-      overlay.style.opacity = '0.96';
+      overlay.style.opacity = flashOpacity;
     },
   };
 };
