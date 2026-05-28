@@ -1,29 +1,51 @@
-export type FrameLoopCallback = (timestamp: number) => void;
-
 export interface FrameLoop {
   start(): void;
   stop(): void;
 }
 
-export const createFrameLoop = (callback: FrameLoopCallback): FrameLoop => {
-  let frameId: number | null = null;
+export const createFrameLoop = (callback: (timestamp: number) => Promise<void> | void): FrameLoop => {
+  let frameId = 0;
+  let running = false;
+  let processing = false;
+
   const tick = (timestamp: number) => {
-    callback(timestamp);
-    frameId = requestAnimationFrame(tick);
+    if (!running) {
+      return;
+    }
+
+    if (processing) {
+      frameId = requestAnimationFrame(tick);
+      return;
+    }
+
+    processing = true;
+    Promise.resolve(callback(timestamp))
+      .catch(() => {
+        // Errors are reported by the owning actor; the loop only controls scheduling.
+      })
+      .finally(() => {
+        processing = false;
+        if (running) {
+          frameId = requestAnimationFrame(tick);
+        }
+      });
   };
 
   return {
     start() {
-      if (frameId === null) {
-        frameId = requestAnimationFrame(tick);
+      if (running) {
+        return;
       }
+
+      running = true;
+      frameId = requestAnimationFrame(tick);
     },
     stop() {
-      if (frameId !== null) {
+      running = false;
+      if (frameId) {
         cancelAnimationFrame(frameId);
-        frameId = null;
+        frameId = 0;
       }
     },
   };
 };
-

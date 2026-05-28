@@ -2,22 +2,101 @@ export { defaultConfig, resolveConfig } from './config.js';
 export type {
   CheckConfig,
   DebugConfig,
+  DebugOptions,
+  FaceFitOptions,
+  LightTestOptions,
+  LivenessChallengeOptions,
   ModelConfig,
+  ResolvedDebugOptions,
+  ResolvedLightTestOptions,
+  ResolvedLivenessChallengeOptions,
+  ResolvedVerificationOptions,
+  RuntimeVerificationCheck,
+  VerificationActorInspect,
   VerificationCheck,
-  WebVerifyConfig,
-  WebVerifyUserConfig,
+  VerificationOptions,
+  OpenFaceLivenessConfig,
+  OpenFaceLivenessUserConfig,
 } from './config.js';
-export { emptyResult } from './result.js';
+export { OpenFaceLiveness, createOpenFaceLivenessClient } from './open-face-liveness.js';
 export type {
-  FaceResult,
-  LightResult,
-  LivenessResult,
+  OpenFaceLivenessCheckSelection,
+  OpenFaceLivenessClient,
+  OpenFaceLivenessLoadOptions,
+  OpenFaceLivenessStartOptions,
+} from './open-face-liveness.js';
+export { createLightSequence } from './light/sequence.js';
+export type { CreateLightSequenceOptions } from './light/sequence.js';
+export { createLivenessSequence } from './liveness/sequence.js';
+export type { CreateLivenessSequenceOptions } from './liveness/sequence.js';
+export {
+  createVerificationSession,
+  resolveDebugOptions,
+  resolveLightOptions,
+  resolveVerificationOptions,
+} from './flow/index.js';
+export type {
+  VerificationSession,
+  OpenFaceLivenessSnapshot,
+} from './flow/index.js';
+export type {
+  CameraStreamInfo,
+  DiagnosticsFrame,
+  FrameTimings,
+  VerificationAnalysisPayload,
+  VerificationContext,
+  VerificationEvent,
+  VerificationSessionEvent,
+  VerificationSnapshot,
+  VerificationStage,
+} from './events.js';
+export { VERIFICATION_STAGES } from './events.js';
+export {
+  VerificationError,
+  isVerificationError,
+  toVerificationError,
+} from './errors.js';
+export type {
+  VerificationErrorArea,
+  VerificationErrorCode,
+  VerificationErrorDetail,
+  VerificationErrorOptions,
+} from './errors.js';
+export type {
+  FaceAnchorDrift,
+  FaceAnchorPosition,
+  FaceDetectionResult,
+  FaceFitResult,
+  FaceMeshResult,
+  FaceStabilityResult,
+  FaceVerificationResult,
+  FrameSize,
+  LandmarkBounds,
+  LandmarkList,
+  LightTestChroma,
+  LightTestColor,
+  LightTestPassChecks,
+  LightTestPhase,
+  LightTestResult,
+  LightTestSample,
+  LightTestState,
+  LightTestStatus,
+  LightTestStepComparison,
+  LivenessChallengeDirection,
+  LivenessChallengeFrame,
+  LivenessChallengeMetrics,
+  LivenessChallengePhase,
+  LivenessChallengePoseSnapshot,
+  LivenessChallengeRecord,
+  LivenessChallengeResult,
+  LivenessChallengeState,
+  LivenessChallengeTelemetry,
+  LivenessChallengeType,
   Point3D,
   Rect,
-  SpoofResult,
+  SpoofFrameResult,
+  SpoofLabel,
+  SpoofSummaryResult,
   VerificationResult,
+  ZRange,
 } from './result.js';
-export { loadModelManifest, parseModelManifest } from './models.js';
-export type { ModelCapability, ModelManifest, ModelSpec } from './models.js';
-export { WebVerify } from './web-verify.js';
-

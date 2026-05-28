@@ -1,0 +1,14 @@
+{
+  "name": "open-face-liveness-opencv-vendor",
+  "private": true,
+  "description": "Vendored OpenCV.js 4.4.0 WebAssembly assets for open-face-liveness light checks.",
+  "version": "4.4.0",
+  "homepage": "https://opencv.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opencv/opencv.git"
+  },
+  "license": "BSD-3-Clause",
+  "main": "opencv.js",
+  "files": ["opencv.js", "opencv_js.wasm", "opencv-worker.js"]
+}

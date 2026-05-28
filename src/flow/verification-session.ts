@@ -1,0 +1,1135 @@
+import {
+  createVerificationSessionMachine,
+  toVerificationSnapshot,
+  type AnalyzeFaceInput,
+  type LoadModelsInput,
+  type LoadModelsOutput,
+  type RequestCameraInput,
+  type RequestCameraOutput,
+  type VerificationMachineResourceContext,
+} from './machine.js';
+import {
+  toVerificationError,
+  VerificationError,
+  type VerificationErrorDetail,
+  type VerificationErrorCode,
+} from '../errors.js';
+import type {
+  VerificationOptions as CoreVerificationOptions,
+} from '../config.js';
+import type {
+  DiagnosticsFrame,
+  VerificationEvent,
+  VerificationSnapshot,
+  VerificationStage,
+} from '../events.js';
+import type {
+  FaceAnchorPosition,
+  FaceDetectionResult,
+  FaceFitResult,
+  FaceMeshResult,
+  FaceStabilityResult,
+  LightTestColor,
+  LightTestState,
+  LivenessChallengeMetrics,
+  LivenessChallengeResult,
+  LivenessChallengeState,
+  SpoofFrameResult,
+  SpoofSummaryResult,
+  VerificationResult,
+} from '../result.js';
+import { getFaceGuideRect } from '../face/geometry.js';
+import { getAnchorDrift, getAnchorPosition, isAnchorStable } from '../face/stability.js';
+import { validateFaceFit } from '../face/fit.js';
+import { createLightPipeline, type LightPipeline } from '../light/pipeline.js';
+import {
+  createLivenessChallengeController,
+  extractLivenessChallengeMetrics,
+  type LivenessChallengeController,
+} from '../liveness/challenge.js';
+import { loadModelRuntime } from '../models/loader.js';
+import type { ModelRuntimeBundle } from '../models.js';
+import { summarizeSpoofSamples } from '../spoof/pipeline.js';
+import { createActor, fromCallback, fromPromise, type AnyEventObject } from 'xstate';
+import { requestCamera, type CameraHandle } from '../capture/camera.js';
+import { createFrameLoop } from '../capture/frame-loop.js';
+import { getErrorMessage } from '../capture/media.js';
+import { SubscriptionStore, type Unsubscribe } from './subscriptions.js';
+
+export interface VerificationOptions extends CoreVerificationOptions<HTMLVideoElement> {
+  runtime?: ModelRuntimeBundle;
+}
+
+export type OpenFaceLivenessSnapshot = VerificationSnapshot<HTMLVideoElement>;
+
+export interface VerificationSession {
+  destroy(): Promise<void>;
+  getSnapshot(): OpenFaceLivenessSnapshot;
+  reset(): void;
+  start(): Promise<VerificationResult>;
+  stop(): void;
+  subscribe(listener: (snapshot: OpenFaceLivenessSnapshot) => void): Unsubscribe;
+}
+
+interface LivenessCompletionHold {
+  diagnostics: DiagnosticsFrame;
+  readyAt: number;
+  result: LivenessChallengeResult;
+  state: LivenessChallengeState;
+}
+
+interface PendingStart {
+  promise: Promise<VerificationResult>;
+  reject: (error: unknown) => void;
+}
+
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
+
+const isCameraPermissionError = (error: unknown): boolean =>
+  error instanceof DOMException &&
+  (error.name === 'NotAllowedError' ||
+    error.name === 'PermissionDeniedError' ||
+    error.name === 'SecurityError');
+
+const toCameraError = (error: unknown): VerificationError => {
+  if (error instanceof VerificationError) {
+    return error;
+  }
+
+  if (isCameraPermissionError(error)) {
+    return new VerificationError(
+      'camera.permission_denied',
+      'Camera access is required to continue.',
+      { cause: error },
+    );
+  }
+
+  return new VerificationError(
+    'camera.unavailable',
+    'Camera access is unavailable. Check your camera and try again.',
+    { cause: error },
+  );
+};
+
+const getSnapshotErrorCode = (snapshot: OpenFaceLivenessSnapshot): VerificationErrorCode => {
+  if (snapshot.errorDetail) {
+    return snapshot.errorDetail.code;
+  }
+
+  if (snapshot.lastEvent?.type === 'STOP') {
+    return 'session.cancelled';
+  }
+
+  if (!snapshot.lastEvent || !('error' in snapshot.lastEvent)) {
+    return 'unknown';
+  }
+
+  switch (snapshot.lastEvent.type) {
+    case 'CAMERA_DENIED':
+      return 'camera.permission_denied';
+    case 'CAMERA_LOST':
+      return 'camera.lost';
+    case 'MODELS_FAILED':
+      return 'models.load_failed';
+    case 'ERROR':
+      return 'analysis.failed';
+  }
+};
+
+const createSessionDestroyedError = (): VerificationError =>
+  new VerificationError(
+    'session.destroyed',
+    'Verification session was destroyed before completion.',
+    { area: 'session' },
+  );
+
+const throwIfSessionAborted = (signal: AbortSignal): void => {
+  if (signal.aborted) {
+    throw createSessionDestroyedError();
+  }
+};
+
+const modelRuntimeDestroyPromises = new WeakMap<ModelRuntimeBundle, Promise<void>>();
+
+const destroyModelRuntime = (runtime: ModelRuntimeBundle): Promise<void> => {
+  const existing = modelRuntimeDestroyPromises.get(runtime);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = Promise.resolve().then(() => runtime.destroy());
+  modelRuntimeDestroyPromises.set(runtime, promise);
+  return promise;
+};
+
+const createErrorDetail = (
+  area: VerificationErrorDetail['area'],
+  code: VerificationErrorDetail['code'],
+  message: string,
+  recoverable = false,
+): VerificationErrorDetail => ({
+  area,
+  code,
+  message,
+  recoverable,
+});
+
+const createLightIlluminationController = () => {
+  let element: HTMLDivElement | null = null;
+  const flashOpacity = '1';
+
+  const getFlashColor = (color: LightTestColor): string =>
+    `rgb(${color.rgb[0]} ${color.rgb[1]} ${color.rgb[2]})`;
+
+  const ensureElement = () => {
+    if (element) {
+      return element;
+    }
+
+    element = document.createElement('div');
+    element.setAttribute('aria-hidden', 'true');
+    element.style.backgroundColor = 'transparent';
+    element.style.height = '100dvh';
+    element.style.inset = '0';
+    element.style.mixBlendMode = 'normal';
+    element.style.opacity = '0';
+    element.style.pointerEvents = 'none';
+    element.style.position = 'fixed';
+    element.style.transition = 'background-color 45ms linear, opacity 45ms linear';
+    element.style.width = '100vw';
+    element.style.zIndex = '2147483647';
+    document.body.appendChild(element);
+    return element;
+  };
+
+  return {
+    destroy() {
+      element?.remove();
+      element = null;
+    },
+    set(color: LightTestColor | null) {
+      if (!color) {
+        if (element) {
+          element.style.opacity = '0';
+          element.style.backgroundColor = 'transparent';
+        }
+        return;
+      }
+
+      const overlay = ensureElement();
+      overlay.style.backgroundColor = getFlashColor(color);
+      overlay.style.opacity = flashOpacity;
+    },
+  };
+};
+
+const createDiagnosticsFrame = ({
+  detection,
+  faceFit,
+  frameIndex,
+  frameMs,
+  light,
+  livenessMetrics,
+  mesh,
+  spoof,
+  stability,
+  stage,
+  timestamp,
+  video,
+}: {
+  detection: FaceDetectionResult | null;
+  faceFit: FaceFitResult | null;
+  frameIndex: number;
+  frameMs: number | null;
+  light?: LightTestState | null;
+  livenessMetrics: LivenessChallengeMetrics | null;
+  mesh: FaceMeshResult | null;
+  spoof: SpoofFrameResult | null;
+  stability: FaceStabilityResult | null;
+  stage: VerificationStage;
+  timestamp: number;
+  video: HTMLVideoElement;
+}): DiagnosticsFrame => ({
+  detection,
+  faceFit,
+  frameIndex,
+  frameSize: {
+    height: video.videoHeight || 0,
+    width: video.videoWidth || 0,
+  },
+  light: light ?? null,
+  livenessMetrics,
+  mesh,
+  spoof,
+  stability,
+  stage,
+  timestamp,
+  timings: {
+    detectorMs: detection?.runMs ?? null,
+    frameMs,
+    meshMs: mesh?.runMs ?? null,
+    spoofMs: spoof?.runMs ?? null,
+  },
+});
+
+const createRequestCameraActor = () =>
+  fromPromise<RequestCameraOutput, RequestCameraInput>(async ({ input, signal }) => {
+    const { face, video } = input;
+    let handle: CameraHandle | null = null;
+    const stopResolvedHandle = () => {
+      const resolvedHandle = handle;
+      handle = null;
+      resolvedHandle?.stop();
+    };
+
+    try {
+      throwIfSessionAborted(signal);
+      signal.addEventListener('abort', stopResolvedHandle, { once: true });
+      handle = await requestCamera({ face, video });
+
+      if (signal.aborted) {
+        stopResolvedHandle();
+        throw createSessionDestroyedError();
+      }
+
+      return {
+        handle,
+        streamInfo: handle.streamInfo,
+      };
+    } catch (error) {
+      if (signal.aborted) {
+        stopResolvedHandle();
+        throw createSessionDestroyedError();
+      }
+
+      throw toCameraError(error);
+    } finally {
+      signal.removeEventListener('abort', stopResolvedHandle);
+    }
+  });
+
+const createLoadModelsActor = (runtime?: ModelRuntimeBundle) =>
+  fromPromise<LoadModelsOutput, LoadModelsInput>(async ({ input, signal }) => {
+    throwIfSessionAborted(signal);
+
+    if (runtime) {
+      return {
+        handle: runtime,
+        models: runtime.models,
+      };
+    }
+
+    const { checks, models } = input;
+    let bundle: ModelRuntimeBundle | null = null;
+    const destroyResolvedBundle = () => {
+      const resolvedBundle = bundle;
+      bundle = null;
+      return resolvedBundle ? destroyModelRuntime(resolvedBundle) : Promise.resolve();
+    };
+    const destroyResolvedBundleOnAbort = () => {
+      void destroyResolvedBundle();
+    };
+
+    try {
+      signal.addEventListener('abort', destroyResolvedBundleOnAbort, { once: true });
+      bundle = await loadModelRuntime({ checks, models });
+
+      if (signal.aborted) {
+        await destroyResolvedBundle();
+        throw createSessionDestroyedError();
+      }
+
+      return {
+        handle: bundle,
+        models: bundle.models,
+      };
+    } catch (error) {
+      if (signal.aborted) {
+        await destroyResolvedBundle();
+        throw createSessionDestroyedError();
+      }
+
+      throw toVerificationError(error, {
+        area: 'models',
+        code: 'models.load_failed',
+        message: 'Face verification could not start. Please try again.',
+      });
+    } finally {
+      signal.removeEventListener('abort', destroyResolvedBundleOnAbort);
+    }
+  });
+
+const createAnalyzeFaceActor = () =>
+  fromCallback<AnyEventObject, AnalyzeFaceInput>(({ input, sendBack }) => {
+    const {
+      checks,
+      debug,
+      face,
+      light,
+      liveness,
+      modelsHandle,
+      video,
+    } = input;
+    const runtime = modelsHandle;
+    const sendEvent = (event: VerificationEvent) => sendBack(event);
+    const hasLight = checks.includes('light');
+    const hasLiveness = checks.includes('liveness');
+    const hasSpoof = checks.includes('spoof');
+    const livenessController: LivenessChallengeController | null = hasLiveness
+      ? createLivenessChallengeController(liveness)
+      : null;
+    const illumination = createLightIlluminationController();
+    const lightPipeline: LightPipeline | null = hasLight
+      ? createLightPipeline({
+          onIlluminationChange: (color) => illumination.set(color),
+          options: light,
+        })
+      : null;
+    let anchorReference: FaceAnchorPosition | null = null;
+    let faceReadyEmitted = false;
+    let frameIndex = 0;
+    let lastDebugAt = 0;
+    let lightCompleted = !hasLight;
+    let livenessCompleted = !hasLiveness;
+    let livenessCompletionHold: LivenessCompletionHold | null = null;
+    const livenessToLightDelayMs = hasLight ? Math.max(0, liveness.celebrationDurationMs) : 0;
+    let livenessStarted = false;
+    let stableStartedAt = 0;
+    const spoofSamples: SpoofFrameResult[] = [];
+    let skippedSpoofSamples = 0;
+    let spoofSummary: SpoofSummaryResult | null = hasSpoof
+      ? summarizeSpoofSamples(spoofSamples, skippedSpoofSamples)
+      : null;
+
+    const getRequiredSpoofFailure = (): VerificationErrorDetail | null => {
+      if (!hasSpoof) {
+        return null;
+      }
+
+      if (!spoofSummary || spoofSummary.modelsUsed <= 0 || spoofSummary.sampleCount <= 0) {
+        return createErrorDetail(
+          'spoof',
+          'spoof.insufficient_evidence',
+          'Required spoof check did not produce evidence.',
+        );
+      }
+
+      return null;
+    };
+
+    const sendRequiredCheckFailure = (errorDetail: VerificationErrorDetail): void => {
+      sendEvent({
+        error: errorDetail.message,
+        errorDetail,
+        type: 'ERROR',
+      });
+    };
+
+    const resetStability = () => {
+      anchorReference = null;
+      stableStartedAt = 0;
+    };
+
+    const resetMeshTracking = () => {
+      runtime.mesh.reset?.();
+    };
+
+    const emitDebugFrame = (diagnostics: DiagnosticsFrame) => {
+      if (!debug.enabled || diagnostics.timestamp - lastDebugAt < debug.throttleMs) {
+        return;
+      }
+
+      lastDebugAt = diagnostics.timestamp;
+      sendEvent({
+        detection: diagnostics.detection,
+        diagnostics,
+        faceFit: diagnostics.faceFit,
+        light: diagnostics.light,
+        mesh: diagnostics.mesh,
+        spoof: diagnostics.spoof,
+        spoofSummary,
+        ...(diagnostics.stability ? { stability: diagnostics.stability } : {}),
+        type: 'DEBUG_FRAME',
+      });
+    };
+
+    const getDiagnosticsPayload = (diagnostics: DiagnosticsFrame): DiagnosticsFrame | null =>
+      debug.enabled ? diagnostics : null;
+
+    const emitLivenessUpdate = (
+      diagnostics: DiagnosticsFrame,
+      anchorPosition: FaceAnchorPosition | null,
+    ): boolean => {
+      if (!livenessController) {
+        return false;
+      }
+
+      if (livenessCompletionHold) {
+        const { diagnostics: heldDiagnostics, readyAt, result, state } = livenessCompletionHold;
+        const payload = {
+          detection: heldDiagnostics.detection,
+          diagnostics: getDiagnosticsPayload(heldDiagnostics),
+          faceFit: heldDiagnostics.faceFit,
+          liveness: state,
+          mesh: heldDiagnostics.mesh,
+          spoof: heldDiagnostics.spoof,
+          spoofSummary,
+          stability: heldDiagnostics.stability,
+        };
+
+        if (diagnostics.timestamp >= readyAt) {
+          const spoofFailure = getRequiredSpoofFailure();
+          if (spoofFailure) {
+            sendRequiredCheckFailure(spoofFailure);
+            return false;
+          }
+
+          livenessCompleted = true;
+          livenessCompletionHold = null;
+          sendEvent({
+            ...payload,
+            result,
+            type: 'LIVENESS_COMPLETED',
+          });
+          return true;
+        }
+
+        sendEvent({
+          ...payload,
+          type: 'LIVENESS_PROGRESS',
+        });
+        return false;
+      }
+
+      if (!livenessStarted) {
+        livenessController.start(diagnostics.timestamp);
+        livenessStarted = true;
+      }
+
+      const { result, state } = livenessController.update({
+        anchorPosition,
+        faceFit: diagnostics.faceFit,
+        metrics: diagnostics.livenessMetrics,
+        timestamp: diagnostics.timestamp,
+      });
+      const payload = {
+        detection: diagnostics.detection,
+        diagnostics: getDiagnosticsPayload(diagnostics),
+        faceFit: diagnostics.faceFit,
+        liveness: state,
+        mesh: diagnostics.mesh,
+        spoof: diagnostics.spoof,
+        spoofSummary,
+        stability: diagnostics.stability,
+      };
+
+      if (result) {
+        const spoofFailure = getRequiredSpoofFailure();
+        if (spoofFailure) {
+          sendRequiredCheckFailure(spoofFailure);
+          return false;
+        }
+
+        if (livenessToLightDelayMs > 0) {
+          livenessCompletionHold = {
+            diagnostics,
+            readyAt: diagnostics.timestamp + livenessToLightDelayMs,
+            result,
+            state,
+          };
+          sendEvent({
+            ...payload,
+            type: 'LIVENESS_PROGRESS',
+          });
+          return false;
+        }
+
+        livenessCompleted = true;
+        sendEvent({
+          ...payload,
+          result,
+          type: 'LIVENESS_COMPLETED',
+        });
+        return true;
+      }
+
+      sendEvent({
+        ...payload,
+        type: 'LIVENESS_PROGRESS',
+      });
+      return false;
+    };
+
+    const emitLightUpdate = async (
+      diagnostics: DiagnosticsFrame,
+    ): Promise<boolean> => {
+      if (!lightPipeline || !diagnostics.detection || !diagnostics.faceFit || !diagnostics.mesh) {
+        return false;
+      }
+
+      const { result, state } = await lightPipeline.update({
+        detection: diagnostics.detection,
+        faceFit: diagnostics.faceFit,
+        frameIndex: diagnostics.frameIndex,
+        mesh: diagnostics.mesh,
+        timestamp: diagnostics.timestamp,
+        video,
+      });
+      const lightDiagnostics: DiagnosticsFrame = {
+        ...diagnostics,
+        light: state,
+        stage: 'lightChallenge',
+      };
+      const payload = {
+        detection: diagnostics.detection,
+        diagnostics: getDiagnosticsPayload(lightDiagnostics),
+        faceFit: diagnostics.faceFit,
+        light: state,
+        mesh: diagnostics.mesh,
+        spoof: null,
+        spoofSummary,
+      };
+
+      if (result) {
+        const spoofFailure = getRequiredSpoofFailure();
+        if (spoofFailure) {
+          sendRequiredCheckFailure(spoofFailure);
+          return false;
+        }
+
+        lightCompleted = true;
+        sendEvent({
+          ...payload,
+          result,
+          type: 'LIGHT_COMPLETED',
+        });
+        return true;
+      }
+
+      sendEvent({
+        ...payload,
+        type: 'LIGHT_PROGRESS',
+      });
+      return false;
+    };
+
+    const recordSpoofFrame = async (
+      detection: FaceDetectionResult,
+    ): Promise<SpoofFrameResult | null> => {
+      if (!hasSpoof) {
+        return null;
+      }
+
+      if (!runtime.spoof) {
+        throw new VerificationError(
+          'spoof.unavailable',
+          'Required spoof check is unavailable.',
+          {
+            detail: createErrorDetail(
+              'spoof',
+              'spoof.unavailable',
+              'Required spoof check is unavailable.',
+            ),
+          },
+        );
+      }
+
+      try {
+        const result = await runtime.spoof.analyze(video, detection);
+        if (result) {
+          spoofSamples.push(result);
+        } else {
+          skippedSpoofSamples += 1;
+        }
+        spoofSummary = summarizeSpoofSamples(spoofSamples, skippedSpoofSamples);
+        return result;
+      } catch {
+        skippedSpoofSamples += 1;
+        spoofSummary = summarizeSpoofSamples(spoofSamples, skippedSpoofSamples);
+        return null;
+      }
+    };
+
+    const loop = createFrameLoop(async (timestamp) => {
+      const frameStartedAt = performance.now();
+      let detection: FaceDetectionResult | null = null;
+      let faceFit: FaceFitResult | null = null;
+      let livenessMetrics: LivenessChallengeMetrics | null = null;
+      let mesh: FaceMeshResult | null = null;
+      let spoof: SpoofFrameResult | null = null;
+      let stability: FaceStabilityResult | null = null;
+      let stage: VerificationStage = 'acquiringFace';
+
+      try {
+        detection = await runtime.detector.detect(video);
+
+        if (!detection) {
+          const isRunningLight = Boolean(lightPipeline && livenessCompleted && !lightCompleted);
+          resetMeshTracking();
+          resetStability();
+          stage = isRunningLight ? 'lightChallenge' : faceReadyEmitted ? 'livenessChallenge' : stage;
+          const diagnostics = createDiagnosticsFrame({
+            detection,
+            faceFit,
+            frameIndex,
+            frameMs: performance.now() - frameStartedAt,
+            light: isRunningLight
+              ? lightPipeline?.getState('Keep your face in view for the light reflection check.', 0)
+              : null,
+            livenessMetrics,
+            mesh,
+            spoof,
+            stability,
+            stage,
+            timestamp,
+            video,
+          });
+          if (isRunningLight && lightPipeline) {
+            const state = lightPipeline.getState('Hold still while face landmarks recover.', 0);
+            const lightDiagnostics = { ...diagnostics, light: state };
+            sendEvent({
+              diagnostics: getDiagnosticsPayload(lightDiagnostics),
+              light: state,
+              spoofSummary,
+              type: 'LIGHT_PROGRESS',
+            });
+            emitDebugFrame(lightDiagnostics);
+            frameIndex += 1;
+            return;
+          }
+          if (faceReadyEmitted && livenessController && !livenessCompleted) {
+            emitLivenessUpdate(diagnostics, null);
+            emitDebugFrame(diagnostics);
+            frameIndex += 1;
+            return;
+          }
+          sendEvent({
+            detection: null,
+            diagnostics: getDiagnosticsPayload(diagnostics),
+            faceFit: null,
+            mesh: null,
+            spoof: null,
+            spoofSummary,
+            stability: null,
+            type: 'FACE_LOST',
+          });
+          emitDebugFrame(diagnostics);
+          frameIndex += 1;
+          return;
+        }
+
+        mesh = await runtime.mesh.estimate(video, detection, {
+          roiExpandFactor: face.roiExpandFactor,
+        });
+
+        if (!mesh) {
+          const isRunningLight = Boolean(lightPipeline && livenessCompleted && !lightCompleted);
+          resetMeshTracking();
+          resetStability();
+          stage = isRunningLight ? 'lightChallenge' : faceReadyEmitted ? 'livenessChallenge' : stage;
+          const diagnostics = createDiagnosticsFrame({
+            detection,
+            faceFit,
+            frameIndex,
+            frameMs: performance.now() - frameStartedAt,
+            light: isRunningLight
+              ? lightPipeline?.getState('Hold still while face landmarks recover.', 0)
+              : null,
+            livenessMetrics,
+            mesh,
+            spoof,
+            stability,
+            stage,
+            timestamp,
+            video,
+          });
+          if (isRunningLight && lightPipeline) {
+            const state = lightPipeline.getState('Keep your face in view for the light reflection check.', 0);
+            const lightDiagnostics = { ...diagnostics, light: state };
+            sendEvent({
+              diagnostics: getDiagnosticsPayload(lightDiagnostics),
+              light: state,
+              spoofSummary,
+              type: 'LIGHT_PROGRESS',
+            });
+            emitDebugFrame(lightDiagnostics);
+            frameIndex += 1;
+            return;
+          }
+          if (faceReadyEmitted && livenessController && !livenessCompleted) {
+            emitLivenessUpdate(diagnostics, null);
+            emitDebugFrame(diagnostics);
+            frameIndex += 1;
+            return;
+          }
+          sendEvent({
+            detection,
+            diagnostics: getDiagnosticsPayload(diagnostics),
+            spoof: null,
+            spoofSummary,
+            type: 'FACE_FOUND',
+          });
+          emitDebugFrame(diagnostics);
+          frameIndex += 1;
+          return;
+        }
+
+        livenessMetrics = extractLivenessChallengeMetrics(mesh);
+        const guideBox = getFaceGuideRect(video.videoWidth, video.videoHeight);
+        const comparisonBox = mesh.geometry.fitBox;
+        faceFit = validateFaceFit(comparisonBox, guideBox, face);
+        const anchorPosition = getAnchorPosition(
+          mesh.geometry.anchorBox,
+          video.videoWidth,
+          video.videoHeight,
+        );
+        const isRunningLight = Boolean(lightPipeline && livenessCompleted && !lightCompleted);
+
+        if (isRunningLight && lightPipeline) {
+          stage = 'lightChallenge';
+          const diagnostics = createDiagnosticsFrame({
+            detection,
+            faceFit,
+            frameIndex,
+            frameMs: performance.now() - frameStartedAt,
+            livenessMetrics,
+            mesh,
+            spoof,
+            stability,
+            stage,
+            timestamp,
+            video,
+          });
+          await emitLightUpdate(diagnostics);
+          emitDebugFrame({
+            ...diagnostics,
+            light: lightPipeline.getState(),
+            stage: 'lightChallenge',
+          });
+          frameIndex += 1;
+          return;
+        }
+
+        if (!faceFit.isAligned) {
+          stage = faceReadyEmitted ? 'livenessChallenge' : stage;
+          if (!faceReadyEmitted) {
+            resetStability();
+          }
+          const diagnostics = createDiagnosticsFrame({
+            detection,
+            faceFit,
+            frameIndex,
+            frameMs: performance.now() - frameStartedAt,
+            livenessMetrics,
+            mesh,
+            spoof,
+            stability,
+            stage,
+            timestamp,
+            video,
+          });
+          if (faceReadyEmitted && livenessController && !livenessCompleted) {
+            emitLivenessUpdate(diagnostics, anchorPosition);
+            emitDebugFrame(diagnostics);
+            frameIndex += 1;
+            return;
+          }
+          sendEvent({
+            detection,
+            diagnostics: getDiagnosticsPayload(diagnostics),
+            faceFit,
+            mesh,
+            spoof,
+            spoofSummary,
+            stability: null,
+            type: 'FACE_MISALIGNED',
+          });
+          emitDebugFrame(diagnostics);
+          frameIndex += 1;
+          return;
+        }
+
+        stage = 'stabilizingFace';
+        let anchorDrift = getAnchorDrift(anchorPosition, anchorReference);
+
+        if (!anchorReference || !isAnchorStable(anchorDrift, face)) {
+          anchorReference = anchorPosition;
+          anchorDrift = null;
+          stableStartedAt = timestamp;
+        }
+
+        const stableMs = Math.max(0, timestamp - stableStartedAt);
+        const progress = clamp(stableMs / face.stabilizationDurationMs, 0, 1);
+        const isStable = progress >= 1;
+        stability = {
+          anchorDrift,
+          anchorPosition,
+          isStable,
+          progress,
+          requiredMs: face.stabilizationDurationMs,
+          stableMs,
+        };
+        stage = isStable ? 'faceReady' : 'stabilizingFace';
+        if (faceReadyEmitted && livenessController && !livenessCompleted) {
+          stage = 'livenessChallenge';
+        }
+
+        spoof = isStable && !livenessCompletionHold
+          ? await recordSpoofFrame(detection)
+          : null;
+
+        const diagnostics = createDiagnosticsFrame({
+          detection,
+          faceFit,
+          frameIndex,
+          frameMs: performance.now() - frameStartedAt,
+          livenessMetrics,
+          mesh,
+          spoof,
+          stability,
+          stage,
+          timestamp,
+          video,
+        });
+
+        if (
+          (livenessCompletionHold || faceReadyEmitted) &&
+          livenessController &&
+          !livenessCompleted
+        ) {
+          emitLivenessUpdate(diagnostics, anchorPosition);
+          emitDebugFrame(diagnostics);
+          frameIndex += 1;
+          return;
+        }
+
+        if (isStable && livenessController && !livenessCompleted) {
+          if (!faceReadyEmitted) {
+            faceReadyEmitted = true;
+            sendEvent({
+              detection,
+              diagnostics: getDiagnosticsPayload(diagnostics),
+              faceFit,
+              mesh,
+              spoof,
+              spoofSummary,
+              stability,
+              type: 'FACE_STABLE',
+            });
+            emitDebugFrame(diagnostics);
+            frameIndex += 1;
+            return;
+          }
+
+          emitLivenessUpdate(diagnostics, anchorPosition);
+          emitDebugFrame(diagnostics);
+          frameIndex += 1;
+          return;
+        }
+
+        sendEvent({
+          detection,
+          diagnostics: getDiagnosticsPayload(diagnostics),
+          faceFit,
+          mesh,
+          spoof,
+          spoofSummary,
+          stability,
+          type: isStable ? 'FACE_STABLE' : 'FACE_ALIGNED',
+        });
+        emitDebugFrame(diagnostics);
+        frameIndex += 1;
+      } catch (error) {
+        const verificationError = toVerificationError(error, {
+          area: 'analysis',
+          code: 'analysis.failed',
+          message: 'Face verification failed. Please try again.',
+        });
+        sendEvent({
+          error: getErrorMessage(verificationError, 'Face verification failed. Please try again.'),
+          errorDetail: verificationError.detail,
+          type: 'ERROR',
+        });
+      }
+    });
+
+    loop.start();
+
+    return () => {
+      loop.stop();
+      illumination.destroy();
+      void lightPipeline?.destroy();
+    };
+  });
+
+const cleanupResources = async (
+  context: VerificationMachineResourceContext,
+  options: { destroyModels?: boolean } = {},
+): Promise<void> => {
+  context.resources.cameraHandle?.stop();
+  if (options.destroyModels === false) {
+    return;
+  }
+
+  const runtime = context.resources.modelsHandle;
+  if (runtime) {
+    await destroyModelRuntime(runtime);
+  }
+};
+
+export const createVerificationSession = (options: VerificationOptions): VerificationSession => {
+  const ownsRuntime = !options.runtime;
+  const machine = createVerificationSessionMachine(options, {
+    analyzeFace: createAnalyzeFaceActor(),
+    cleanup: (context) => cleanupResources(context, { destroyModels: ownsRuntime }),
+    loadModels: createLoadModelsActor(options.runtime),
+    requestCamera: createRequestCameraActor(),
+  });
+  const actor = createActor(
+    machine,
+    options.xstateInspect ? { inspect: options.xstateInspect } : undefined,
+  );
+  const store = new SubscriptionStore<OpenFaceLivenessSnapshot>();
+  let latestSnapshot = toVerificationSnapshot<HTMLVideoElement>(actor.getSnapshot());
+  let destroyPromise: Promise<void> | null = null;
+  let pendingStart: PendingStart | null = null;
+
+  actor.subscribe((snapshot) => {
+    latestSnapshot = toVerificationSnapshot<HTMLVideoElement>(snapshot);
+    store.emit(latestSnapshot);
+  });
+  actor.start();
+  latestSnapshot = toVerificationSnapshot<HTMLVideoElement>(actor.getSnapshot());
+
+  const createPendingStart = (): PendingStart => {
+    let rejectPromise!: (error: unknown) => void;
+    let resolvePromise!: (result: VerificationResult) => void;
+    let settled = false;
+    let unsubscribe: Unsubscribe | null = null;
+    const promise = new Promise<VerificationResult>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    const cleanup = () => {
+      unsubscribe?.();
+      unsubscribe = null;
+    };
+    const resolveStart = (result: VerificationResult) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolvePromise(result);
+    };
+    const rejectStart = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      rejectPromise(error);
+    };
+
+    unsubscribe = store.subscribe((snapshot) => {
+      if (snapshot.stage === 'completed') {
+        if (snapshot.result) {
+          resolveStart(snapshot.result);
+          return;
+        }
+
+        rejectStart(
+          new VerificationError(
+            'session.completed_without_result',
+            'Verification completed without a result.',
+            { area: 'session' },
+          ),
+        );
+        return;
+      }
+
+      if (snapshot.stage === 'failed' || snapshot.stage === 'cancelled') {
+        rejectStart(
+          new VerificationError(
+            getSnapshotErrorCode(snapshot),
+            snapshot.error ?? snapshot.instruction,
+            { detail: snapshot.errorDetail },
+          ),
+        );
+      }
+    });
+
+    store.emit(latestSnapshot);
+
+    return {
+      promise,
+      reject: rejectStart,
+    };
+  };
+
+  return {
+    destroy() {
+      if (!destroyPromise) {
+        destroyPromise = (async () => {
+          const context = actor.getSnapshot().context;
+
+          pendingStart?.reject(createSessionDestroyedError());
+          pendingStart = null;
+          actor.stop();
+          store.clear();
+          await cleanupResources(context, { destroyModels: ownsRuntime });
+        })();
+      }
+
+      return destroyPromise;
+    },
+    getSnapshot() {
+      return latestSnapshot;
+    },
+    reset() {
+      pendingStart?.reject(
+        new VerificationError(
+          'session.cancelled',
+          'Verification session was reset before completion.',
+          { area: 'session' },
+        ),
+      );
+      pendingStart = null;
+      actor.send({ type: 'RESET' });
+    },
+    start() {
+      if (pendingStart) {
+        return pendingStart.promise;
+      }
+
+      if (destroyPromise) {
+        return Promise.reject(createSessionDestroyedError());
+      }
+
+      actor.send({ type: 'START' });
+      const nextStart = createPendingStart();
+      const promise = nextStart.promise.finally(() => {
+        if (pendingStart?.promise === promise) {
+          pendingStart = null;
+        }
+      });
+      pendingStart = {
+        promise,
+        reject: nextStart.reject,
+      };
+
+      return promise;
+    },
+    stop() {
+      actor.send({ type: 'STOP' });
+    },
+    subscribe(listener: (snapshot: OpenFaceLivenessSnapshot) => void) {
+      const unsubscribe = store.subscribe(listener);
+      listener(latestSnapshot);
+
+      return unsubscribe;
+    },
+  };
+};

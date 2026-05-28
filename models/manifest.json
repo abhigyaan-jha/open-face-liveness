@@ -1,5 +1,40 @@
 {
   "version": 1,
-  "models": []
+  "models": [
+    {
+      "id": "mediapipe-face-detector-short-range-128",
+      "capability": "detector",
+      "format": "onnx",
+      "required": true,
+      "url": "face_detector_short_range_128x128_float32.onnx"
+    },
+    {
+      "id": "mediapipe-face-landmarks-detector-256",
+      "capability": "mesh",
+      "format": "onnx",
+      "required": true,
+      "url": "face_landmarks_detector_256x256_float32.onnx"
+    },
+    {
+      "id": "mediapipe-face-blendshapes-146",
+      "capability": "blendshape",
+      "format": "onnx",
+      "required": true,
+      "url": "face_blendshapes_146x2_float32.onnx"
+    },
+    {
+      "id": "silent-face-minifasnet-v2-2.7",
+      "capability": "spoof",
+      "format": "onnx",
+      "required": false,
+      "url": "2.7_80x80_MiniFASNetV2.onnx"
+    },
+    {
+      "id": "silent-face-minifasnet-v1se-4.0",
+      "capability": "spoof",
+      "format": "onnx",
+      "required": false,
+      "url": "4_0_0_80x80_MiniFASNetV1SE.onnx"
+    }
+  ]
 }
-

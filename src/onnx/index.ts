@@ -1,3 +1,8 @@
-export { createOnnxBackend } from './backend.js';
-export type { OnnxBackend } from './backend.js';
-
+export {
+  attachIoMetadata,
+  createOnnxBlendshapeAdapter,
+  createOnnxDetectorAdapter,
+  createOnnxMeshAdapter,
+  createOnnxSpoofAdapter,
+  DEFAULT_ONNX_WASM_BASE_URL,
+} from './adapters.js';

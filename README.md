@@ -1,46 +1,130 @@
-# Web Verify SDK
+# OpenFace Liveness
 
-A browser verification library for face capture, liveness challenges, anti-spoof signals, light response checks, and verification flow orchestration.
+[![Package version](https://img.shields.io/github/package-json/v/abhigyaan-jha/open-face-liveness?label=package)](https://github.com/abhigyaan-jha/open-face-liveness/blob/main/package.json)
+[![CI](https://github.com/abhigyaan-jha/open-face-liveness/actions/workflows/ci.yml/badge.svg)](https://github.com/abhigyaan-jha/open-face-liveness/actions/workflows/ci.yml)
+[![Last commit](https://img.shields.io/github/last-commit/abhigyaan-jha/open-face-liveness)](https://github.com/abhigyaan-jha/open-face-liveness/commits/main)
+[![License](https://img.shields.io/github/license/abhigyaan-jha/open-face-liveness)](LICENSE)
 
-This repository is intentionally private while the public API settles.
+`open-face-liveness` is a browser library for local face-liveness,
+anti-spoofing, and light-response signals.
 
-## Shape
+It runs verification signals locally from an `HTMLVideoElement` using
+browser-loadable ONNX models, giving web apps fast face/liveness checks without
+streaming every video frame to a server.
 
-```txt
-src/web-verify.ts  main facade
-src/config.ts      shared configuration
-src/result.ts      shared result types
-src/models.ts      model manifest helpers
-src/face/          face detection, mesh, and readiness modules
-src/flow/          verification state machine/session flow
-src/light/         light response checks
-src/spoof/         presentation-attack signal checks
-src/onnx/          ONNX runtime helpers
-src/opencv/        OpenCV loading/helpers
-src/capture/       camera and frame capture helpers
-src/draw/          guides and diagnostics overlays
-```
+Use it before ID uploads, sensitive account actions, backend risk checks, or
+manual review. It is not a standalone KYC or regulated identity-proofing system.
 
-## Intended API
+[Try the demo](https://abhigyaan-jha.github.io/open-face-liveness/)
 
-```ts
-import { WebVerify } from 'web-verify';
+## Highlights
 
-const verify = new WebVerify({
-  models: { manifestUrl: '/models/manifest.json' },
-  checks: { face: true, liveness: true, spoof: true, light: true },
-});
+- Browser ONNX stack: MediaPipe BlazeFace short-range detector, 478-landmark
+  Face Mesh, Blendshape V2 expressions, and MiniFASNet V1SE/V2 spoof classifiers
+- Face geometry: OneEuro smoothing, weighted Procrustes alignment,
+  yaw/pitch/roll pose, fit boxes, and stable anchors
+- Liveness challenges: head pan, head pitch, mouth-open, neutral-pose capture,
+  dwell timers, hysteresis, recentering, and telemetry
+- Passive RGB anti-spoofing: multi-model MiniFASNet fusion for
+  screen-replay and presentation attack, with Fourier-spectrum supervision upstream
+- Active screen-light checks: landmark skin regions, OpenCV HSV sampling,
+  sequence correlation, and response magnitude
+- XState verification flow: camera, models, face acquisition, stabilization,
+  liveness, light challenge, completion, and failure
 
-await verify.load();
-const result = await verify.verify(video);
-```
+Ready to wire it up? [Jump to Quick Start](#quick-start).
 
-## Scripts
+## Accessibility Warning
+
+The optional light challenge changes screen colors and may flash bright light.
+Applications using it should warn users first, avoid it for people with
+photosensitive epilepsy, migraine, or similar concerns,
+and provide a non-light verification path when appropriate.
+
+
+## Demos
+
+![OpenFace Liveness spoof demo](./demo_spoof.gif)
+
+Run the local browser demo:
 
 ```sh
 bun install
-bun run typecheck
-bun test
-bun run build
+bun run demo
 ```
 
+Open:
+
+```txt
+http://127.0.0.1:5173/
+```
+
+The demo shows camera flow, live status, debug diagnostics, and local module
+results from face, liveness, light, and spoof checks.
+
+## Quick Start
+
+Install once the package is published:
+
+```sh
+bun add open-face-liveness
+npm install open-face-liveness
+```
+
+Create a client and run a verification session:
+
+```ts
+import { createOpenFaceLivenessClient } from 'open-face-liveness';
+
+const verifier = createOpenFaceLivenessClient();
+
+const result = await verifier.start({
+  video,
+  checks: {
+    face: true,
+    liveness: true,
+    light: true,
+    spoof: true,
+  },
+  models: {
+    manifestUrl: '/open-face-liveness/models/manifest.json',
+  },
+});
+```
+
+The application provides the video element. `open-face-liveness` loads browser models,
+runs the enabled checks, and returns a typed `VerificationResult`.
+
+## Results
+
+`VerificationResult` is exported from the package. Import the canonical type
+instead of recreating the shape in app or demo code:
+
+```ts
+import type { VerificationResult } from 'open-face-liveness';
+
+const result: VerificationResult = await verifier.verify(video);
+```
+
+Face output includes detector score, mesh landmarks, fit checks, and stability.
+Liveness output includes the requested sequence, completed challenges, records,
+and motion telemetry. Light output includes baseline sampling, per-color steps,
+sequence score, correlation, and response magnitude. Spoof output summarizes
+sample counts, model count, real frame ratio, and median scores.
+
+<img src="./results_demo.png" alt="Verification results demo" height="520">
+
+## Learn More
+
+- [Model capabilities and sources](./models/README.md)
+- [Runtime dependencies, assets, and package notes](./src/runtime/README.md)
+- [Face geometry, landmark smoothing, fit, anchor, and liveness math](./src/face/README.md)
+- [Diagnostics overlay legend](./src/draw/README.md)
+- [Third-party model and runtime notices](./THIRD_PARTY_NOTICES.md)
+
+## License
+
+MIT
+
+Bundled models and OpenCV runtime assets retain their upstream licenses. See
+`THIRD_PARTY_NOTICES.md` for npm package attribution and license details.

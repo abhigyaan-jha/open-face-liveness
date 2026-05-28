@@ -1,46 +1,154 @@
-export type ModelCapability =
-  | 'face-detector'
-  | 'face-mesh'
-  | 'spoof'
-  | 'light'
-  | 'liveness';
+import type { RuntimeVerificationCheck } from './config.js';
+import type { FaceDetectionResult, FaceMeshResult, SpoofFrameResult } from './result.js';
+
+export type ModelCapability = 'detector' | 'mesh' | 'blendshape' | 'spoof';
+
+export type ModelOverrides = Partial<Record<ModelCapability, string>> & {
+  [modelId: string]: string | undefined;
+};
 
 export interface ModelSpec {
   capability: ModelCapability;
-  format: 'onnx' | 'opencv';
+  format: 'onnx';
   id: string;
-  required?: boolean;
+  required: boolean;
   url: string;
   version?: string;
 }
 
 export interface ModelManifest {
-  models: readonly ModelSpec[];
+  models: ModelSpec[];
   version: number;
 }
 
-export const parseModelManifest = (raw: unknown): ModelManifest => {
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('Model manifest must be an object.');
-  }
+export interface ResolvedModelSpec extends ModelSpec {
+  inputs?: string[];
+  outputs?: string[];
+}
 
-  const record = raw as Record<string, unknown>;
-  if (!Array.isArray(record.models)) {
-    throw new Error("Model manifest must include a 'models' array.");
-  }
+export interface VerificationModelsOptions {
+  baseUrl?: string;
+  manifestUrl: string;
+  onnxWasmBaseUrl?: string;
+  overrides?: ModelOverrides;
+}
 
-  return {
-    models: record.models as ModelSpec[],
-    version: typeof record.version === 'number' ? record.version : 1,
+export interface DetectorRawResult {
+  boxes: Float32Array;
+  runMs: number;
+  scores: Float32Array;
+}
+
+export interface MeshRawInput {
+  image: Float32Array;
+}
+
+export interface MeshRawResult {
+  landmarks: Float32Array;
+  runMs: number;
+  score: number;
+}
+
+export interface BlendshapeRawResult {
+  runMs: number;
+  scores: Float32Array;
+}
+
+export interface SpoofRawResult {
+  logits: Float32Array;
+  runMs: number;
+}
+
+export interface DetectorAdapter {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
   };
-};
+  dispose(): Promise<void>;
+  run(input: Float32Array): Promise<DetectorRawResult>;
+}
 
-export const loadModelManifest = async (manifestUrl: string): Promise<ModelManifest> => {
-  const response = await fetch(manifestUrl, { headers: { accept: 'application/json' } });
-  if (!response.ok) {
-    throw new Error(`Unable to load model manifest: ${response.status} ${response.statusText}`);
-  }
+export interface MeshAdapter {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
+  };
+  dispose(): Promise<void>;
+  run(input: MeshRawInput): Promise<MeshRawResult | null>;
+}
 
-  return parseModelManifest(await response.json());
-};
+export interface BlendshapeAdapter {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
+  };
+  dispose(): Promise<void>;
+  run(input: Float32Array): Promise<BlendshapeRawResult | null>;
+}
 
+export interface SpoofAdapter {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
+  };
+  readonly model: ResolvedModelSpec;
+  dispose(): Promise<void>;
+  run(input: Float32Array): Promise<SpoofRawResult | null>;
+}
+
+export interface DetectorPipeline {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
+  };
+  destroy(): Promise<void>;
+  detect(video: HTMLVideoElement): Promise<FaceDetectionResult | null>;
+}
+
+export interface MeshPipeline {
+  readonly metadata: {
+    inputs: string[];
+    outputs: string[];
+  };
+  destroy(): Promise<void>;
+  estimate(
+    video: HTMLVideoElement,
+    detection: FaceDetectionResult,
+    options: { roiExpandFactor: number },
+  ): Promise<FaceMeshResult | null>;
+  reset?(): void;
+}
+
+export interface SpoofPipeline {
+  readonly metadata: {
+    models: Array<{
+      id: string;
+      inputs: string[];
+      outputs: string[];
+    }>;
+  };
+  analyze(video: HTMLVideoElement, detection: FaceDetectionResult): Promise<SpoofFrameResult | null>;
+  destroy(): Promise<void>;
+}
+
+export interface ModelRuntimeBundle {
+  destroy(): Promise<void>;
+  detector: DetectorPipeline;
+  manifest: ModelManifest;
+  mesh: MeshPipeline;
+  models: ResolvedModelSpec[];
+  spoof: SpoofPipeline | null;
+}
+
+export interface LoadModelRuntimeOptions {
+  checks?: readonly RuntimeVerificationCheck[];
+  models: VerificationModelsOptions;
+}
+
+export {
+  loadModelManifest,
+  parseModelManifest,
+  requireModelCapability,
+  resolveModelSpecs,
+} from './models/manifest.js';
+export { loadModelRuntime } from './models/loader.js';

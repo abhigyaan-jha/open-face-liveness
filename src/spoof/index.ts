@@ -1,7 +1,18 @@
-import type { SpoofResult } from '../result.js';
-
-export const runSpoofCheck = async (_input: ImageData | HTMLCanvasElement | HTMLVideoElement): Promise<SpoofResult> => ({
-  realScore: null,
-  spoofScore: null,
-});
-
+export {
+  createEmptySpoofSummary,
+  createSpoofPipeline,
+  fuseSpoofScores,
+  parseSpoofModelScale,
+  softmax,
+  summarizeSpoofSamples,
+} from './pipeline.js';
+export type {
+  SpoofAdapter,
+  SpoofPipeline,
+  SpoofRawResult,
+} from '../models.js';
+export type {
+  SpoofFrameResult,
+  SpoofLabel,
+  SpoofSummaryResult,
+} from '../result.js';
