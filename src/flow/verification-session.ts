@@ -560,14 +560,14 @@ const createAnalyzeFaceActor = () =>
       return false;
     };
 
-    const emitLightUpdate = async (
+    const emitLightUpdate = (
       diagnostics: DiagnosticsFrame,
-    ): Promise<boolean> => {
+    ): boolean => {
       if (!lightPipeline || !diagnostics.detection || !diagnostics.faceFit || !diagnostics.mesh) {
         return false;
       }
 
-      const { result, state } = await lightPipeline.update({
+      const { result, state } = lightPipeline.update({
         detection: diagnostics.detection,
         faceFit: diagnostics.faceFit,
         frameIndex: diagnostics.frameIndex,
@@ -800,7 +800,7 @@ const createAnalyzeFaceActor = () =>
             timestamp,
             video,
           });
-          await emitLightUpdate(diagnostics);
+          emitLightUpdate(diagnostics);
           emitDebugFrame({
             ...diagnostics,
             light: lightPipeline.getState(),

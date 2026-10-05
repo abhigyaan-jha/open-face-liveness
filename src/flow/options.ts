@@ -10,7 +10,6 @@ import type {
   VerificationCheck,
   VerificationOptions,
 } from '../config.js';
-import { DEFAULT_OPENCV_ASSET_BASE_URL } from '../config.js';
 import { DEFAULT_LIVENESS_OPTIONS, resolveLivenessOptions } from '../liveness/challenge.js';
 import { DEFAULT_LIGHT_SEQUENCE, resolveLightSequence } from '../light/sequence.js';
 
@@ -52,9 +51,6 @@ export const DEFAULT_LIGHT_OPTIONS: ResolvedLightTestOptions = {
   minColorResponseMagnitude: 0.008,
   minColorSequenceScore: 0.6,
   minSamplePixels: 80,
-  opencvAssetBaseUrl: DEFAULT_OPENCV_ASSET_BASE_URL,
-  opencvReadyTimeoutMs: 15000,
-  opencvWorkerUrl: null,
   sequence: DEFAULT_LIGHT_SEQUENCE,
   stableDurationMs: 700,
   stabilityThreshold: 0.045,
@@ -88,7 +84,6 @@ export const resolveLightOptions = (
   return {
     ...DEFAULT_LIGHT_OPTIONS,
     ...options,
-    opencvWorkerUrl: options?.opencvWorkerUrl ?? DEFAULT_LIGHT_OPTIONS.opencvWorkerUrl,
     sequence,
   };
 };

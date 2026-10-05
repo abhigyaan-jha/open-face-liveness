@@ -17,7 +17,6 @@ export type VerificationErrorCode =
   | 'face.canvas_unavailable'
   | 'light.canvas_unavailable'
   | 'light.invalid_sequence'
-  | 'light.opencv_unavailable'
   | 'light.sample_failed'
   | 'liveness.invalid_challenge'
   | 'models.adapter_invalid'

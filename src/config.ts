@@ -5,7 +5,6 @@ import type { LightTestColor, LivenessChallengeType } from './result.js';
 export const DEFAULT_ASSET_BASE_URL = '/open-face-liveness/';
 export const DEFAULT_MODEL_BASE_URL = `${DEFAULT_ASSET_BASE_URL}models/`;
 export const DEFAULT_MODEL_MANIFEST_URL = `${DEFAULT_MODEL_BASE_URL}manifest.json`;
-export const DEFAULT_OPENCV_ASSET_BASE_URL = `${DEFAULT_ASSET_BASE_URL}vendor/opencv/`;
 export const DEFAULT_TFJS_WASM_BASE_URL = `${DEFAULT_ASSET_BASE_URL}vendor/tfjs-wasm/`;
 
 export type VerificationCheck = 'face' | 'light' | 'liveness' | 'spoof';
@@ -92,9 +91,6 @@ export interface LightTestOptions {
   minColorResponseMagnitude?: number;
   minColorSequenceScore?: number;
   minSamplePixels?: number;
-  opencvAssetBaseUrl?: string;
-  opencvReadyTimeoutMs?: number;
-  opencvWorkerUrl?: string;
   sequence?: readonly LightTestColor[];
   stableDurationMs?: number;
   stabilityThreshold?: number;
@@ -108,9 +104,6 @@ export interface ResolvedLightTestOptions {
   minColorResponseMagnitude: number;
   minColorSequenceScore: number;
   minSamplePixels: number;
-  opencvAssetBaseUrl: string;
-  opencvReadyTimeoutMs: number;
-  opencvWorkerUrl: string | null;
   sequence: readonly LightTestColor[];
   stableDurationMs: number;
   stabilityThreshold: number;
