@@ -25,7 +25,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "open-face-liveness": "./bin/open-face-liveness.mjs"
+    "open-face-liveness": "bin/open-face-liveness.mjs"
   },
   "files": [
     "bin",
