@@ -9,6 +9,7 @@ import { VerificationError } from '../errors.js';
 
 const MODEL_CAPABILITIES: readonly ModelCapability[] = ['detector', 'mesh', 'blendshape', 'spoof'];
 const URL_RESOLUTION_ORIGIN = 'https://open-face-liveness.local';
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 interface ResolveModelSpecOptions {
   baseUrl?: string;
@@ -46,9 +47,33 @@ const toModelSpec = (entry: unknown): ModelSpec => {
     });
   }
 
+  if (record.format !== undefined && record.format !== 'tfjs') {
+    throw new VerificationError(
+      'models.manifest_invalid',
+      `Model '${record.id}' has unsupported format ${JSON.stringify(record.format)}. Only TensorFlow.js graph models ('tfjs') are supported.`,
+      { area: 'models' },
+    );
+  }
+
+  const files = record.files;
+  if (
+    !files
+    || typeof files !== 'object'
+    || Array.isArray(files)
+    || Object.keys(files).length === 0
+    || !Object.values(files).every((hash) => typeof hash === 'string' && SHA256_HEX.test(hash))
+  ) {
+    throw new VerificationError(
+      'models.manifest_invalid',
+      `Model '${record.id}' must list its files with lowercase SHA-256 hashes.`,
+      { area: 'models' },
+    );
+  }
+
   return {
     capability: record.capability,
-    format: 'onnx',
+    files: { ...(files as Record<string, string>) },
+    format: 'tfjs',
     id: record.id,
     required: record.required !== false,
     url: record.url,

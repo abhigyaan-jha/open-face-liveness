@@ -1,40 +1,60 @@
 {
-  "version": 1,
+  "version": 2,
   "models": [
     {
       "id": "mediapipe-face-detector-short-range-128",
       "capability": "detector",
-      "format": "onnx",
+      "format": "tfjs",
       "required": true,
-      "url": "face_detector_short_range_128x128_float32.onnx"
+      "url": "face_detector_short_range_128x128_float32/model.json",
+      "files": {
+        "group1-shard1of1.bin": "d4eb7c58e917e1f5d8a8c976e129a9e4f8993c718f1c0a73ea0e5feac000ab0d",
+        "model.json": "0119fbd8ee4b2b8a92604e423f7f69fc07640be26c6a842510fa19a44eb96b1b"
+      }
     },
     {
       "id": "mediapipe-face-landmarks-detector-256",
       "capability": "mesh",
-      "format": "onnx",
+      "format": "tfjs",
       "required": true,
-      "url": "face_landmarks_detector_256x256_float32.onnx"
+      "url": "face_landmarks_detector_256x256_float32/model.json",
+      "files": {
+        "group1-shard1of1.bin": "1a9f222b10441d730573fcad93552a7d34798a1b107a77841356c95b52a48b78",
+        "model.json": "a6b9029c58e9862584d13a5b41eda6f4a0d2b26bc79b37e65673a9fdfd004add"
+      }
     },
     {
       "id": "mediapipe-face-blendshapes-146",
       "capability": "blendshape",
-      "format": "onnx",
+      "format": "tfjs",
       "required": true,
-      "url": "face_blendshapes_146x2_float32.onnx"
+      "url": "face_blendshapes_146x2_float32/model.json",
+      "files": {
+        "group1-shard1of1.bin": "9d59b6a906b37d150c8049f24eba87388538466772ce4c0f0e7ae8b9d7547aed",
+        "model.json": "3daa04346686cbc645962b2c27f274e51d72b38ba162c98533a8d8bb03841bc6"
+      }
     },
     {
       "id": "silent-face-minifasnet-v2-2.7",
       "capability": "spoof",
-      "format": "onnx",
+      "format": "tfjs",
       "required": false,
-      "url": "2.7_80x80_MiniFASNetV2.onnx"
+      "url": "2.7_80x80_MiniFASNetV2/model.json",
+      "files": {
+        "group1-shard1of1.bin": "f6996f60b415f2cc5e3f56043b545fdfe8b68a12b76555a03d217e9d0945c651",
+        "model.json": "8ec6439e9900bf5840f804169c7712773d3b4e33a894c50e2a7a226e9a20253c"
+      }
     },
     {
       "id": "silent-face-minifasnet-v1se-4.0",
       "capability": "spoof",
-      "format": "onnx",
+      "format": "tfjs",
       "required": false,
-      "url": "4_0_0_80x80_MiniFASNetV1SE.onnx"
+      "url": "4_0_0_80x80_MiniFASNetV1SE/model.json",
+      "files": {
+        "group1-shard1of1.bin": "90acdf31a52d13ef688e498b2d463a64c44e0193ac6d066850f6b66be1ab467e",
+        "model.json": "0d6ad0e99caf61930d4e4aab090b0cdc18dabbb742872e47f036a52b6dd9270c"
+      }
     }
   ]
 }

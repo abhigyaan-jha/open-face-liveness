@@ -107,7 +107,7 @@ export const resolveVerificationOptions = <TVideo>(
   models: {
     baseUrl: options.models.baseUrl,
     manifestUrl: options.models.manifestUrl,
-    onnxWasmBaseUrl: options.models.onnxWasmBaseUrl,
+    tfjsWasmBaseUrl: options.models.tfjsWasmBaseUrl,
     overrides: options.models.overrides ? { ...options.models.overrides } : undefined,
   },
   video: options.video,

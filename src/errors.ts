@@ -21,6 +21,7 @@ export type VerificationErrorCode =
   | 'light.sample_failed'
   | 'liveness.invalid_challenge'
   | 'models.adapter_invalid'
+  | 'models.integrity_failed'
   | 'models.load_failed'
   | 'models.manifest_invalid'
   | 'models.manifest_load_failed'
