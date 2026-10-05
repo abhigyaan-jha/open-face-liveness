@@ -64,7 +64,7 @@ results from face, liveness, light, and spoof checks.
 
 ## Quick Start
 
-Install once the package is published:
+Install:
 
 ```sh
 bun add open-face-liveness

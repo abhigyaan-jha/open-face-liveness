@@ -1,11 +1,13 @@
 {
   "name": "open-face-liveness",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Browser library for local face-liveness, anti-spoofing, and light-response signals.",
-  "private": true,
   "type": "module",
   "packageManager": "bun@1.3.12",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Abhigyaan Jha",
   "homepage": "https://github.com/abhigyaan-jha/open-face-liveness#readme",
   "repository": {
