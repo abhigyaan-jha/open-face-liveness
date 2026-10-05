@@ -27,7 +27,7 @@ manual review. It is not a standalone KYC or regulated identity-proofing system.
   dwell timers, hysteresis, recentering, and telemetry
 - Passive RGB anti-spoofing: multi-model MiniFASNet fusion for
   screen-replay and presentation attack, with Fourier-spectrum supervision upstream
-- Active screen-light checks: landmark skin regions, OpenCV HSV sampling,
+- Active screen-light checks: landmark skin regions, HSV color sampling,
   sequence correlation, and response magnitude
 - XState verification flow: camera, models, face acquisition, stabilization,
   liveness, light challenge, completion, and failure
@@ -129,5 +129,5 @@ sample counts, model count, real frame ratio, and median scores.
 
 MIT
 
-Bundled models and OpenCV runtime assets retain their upstream licenses. See
+Bundled models and TensorFlow.js runtime assets retain their upstream licenses. See
 `THIRD_PARTY_NOTICES.md` for npm package attribution and license details.

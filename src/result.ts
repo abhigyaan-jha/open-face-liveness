@@ -215,6 +215,7 @@ export interface LightTestSample {
   averageGreen: number | null;
   averageHue?: number | null;
   averageHueDegrees?: number | null;
+  /** Hue on OpenCV's 8-bit scale, 0-180 (degrees / 2). */
   averageHueOpenCv?: number | null;
   averageRed: number | null;
   averageSaturation: number | null;
@@ -240,6 +241,7 @@ export interface LightTestStepComparison {
   color: LightTestColor;
   colorDirectionSimilarity?: number | null;
   expectedHueDegrees?: number | null;
+  /** Hue on OpenCV's 8-bit scale, 0-180 (degrees / 2). */
   expectedHueOpenCv?: number | null;
   hsvExpectedVector?: readonly [number, number] | null;
   hsvObservedVector?: readonly [number, number] | null;
