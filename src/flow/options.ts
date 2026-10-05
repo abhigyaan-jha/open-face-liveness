@@ -100,6 +100,7 @@ export const resolveVerificationOptions = <TVideo>(
   light: resolveLightOptions(options.light),
   liveness: resolveLivenessOptions(options.liveness),
   models: {
+    assetBaseUrl: options.models.assetBaseUrl,
     baseUrl: options.models.baseUrl,
     manifestUrl: options.models.manifestUrl,
     tfjsWasmBaseUrl: options.models.tfjsWasmBaseUrl,

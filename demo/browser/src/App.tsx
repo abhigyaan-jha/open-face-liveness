@@ -33,7 +33,6 @@ import {
 } from '../../../src/index.js';
 import { createFrameToDisplayMapper } from '../../../src/capture/index.js';
 import { mountDiagnosticsOverlay } from '../../../src/draw/index.js';
-import { DEMO_ASSET_CONFIG } from './env.js';
 import {
   getGuideClasses,
   getSnapshotRenderKey,
@@ -42,13 +41,7 @@ import {
   SNAPSHOT_DEBUG_RENDER_INTERVAL_MS,
 } from './snapshot-view.js';
 
-const verifier = createOpenFaceLivenessClient({
-  models: {
-    baseUrl: DEMO_ASSET_CONFIG.modelBaseUrl,
-    manifestUrl: DEMO_ASSET_CONFIG.modelManifestUrl,
-    tfjsWasmBaseUrl: DEMO_ASSET_CONFIG.tfjsWasmBaseUrl,
-  },
-});
+const verifier = createOpenFaceLivenessClient();
 
 const DEMO_LIGHT_SAMPLE_CAPTURE_PROGRESS = 0.5;
 const DEMO_LIGHT_SELFIE_MIME_TYPE = 'image/jpeg';
@@ -774,11 +767,6 @@ export const App = function App() {
         },
         liveness: {
           challenges: createLivenessSequence({ length: 3 }),
-        },
-        models: {
-          baseUrl: DEMO_ASSET_CONFIG.modelBaseUrl,
-          manifestUrl: DEMO_ASSET_CONFIG.modelManifestUrl,
-          tfjsWasmBaseUrl: DEMO_ASSET_CONFIG.tfjsWasmBaseUrl,
         },
         onSnapshot: handleSnapshot,
         video: videoRef.current,

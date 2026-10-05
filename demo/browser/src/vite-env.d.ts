@@ -1,9 +1,3 @@
 /// <reference types="vite/client" />
 
 declare module '*.css';
-
-interface ImportMetaEnv {
-  readonly VITE_OPEN_FACE_LIVENESS_MODEL_BASE_URL?: string;
-  readonly VITE_OPEN_FACE_LIVENESS_MODEL_MANIFEST_URL?: string;
-  readonly VITE_OPEN_FACE_LIVENESS_TFJS_WASM_BASE_URL?: string;
-}

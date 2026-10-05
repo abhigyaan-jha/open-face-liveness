@@ -27,13 +27,29 @@ export interface ModelManifest {
 }
 
 export interface ResolvedModelSpec extends ModelSpec {
+  /**
+   * Where to fetch each file in `files`, when it differs from its path relative to `url`,
+   * e.g. the hashed URLs a bundler gives the package's own model files.
+   */
+  fileUrls?: Record<string, string>;
   inputs?: string[];
   outputs?: string[];
 }
 
+/**
+ * Where models and TensorFlow.js wasm files load from. Leave everything unset to load the
+ * files the app's bundler (Vite, webpack 5, Rspack, Parcel, Next.js) emits from this package.
+ */
 export interface VerificationModelsOptions {
+  /**
+   * Base URL of a copy of the package's `models/` and `vendor/` directories, e.g. one made by
+   * `npx open-face-liveness init public/open-face-liveness`, or a CDN mirror of the package.
+   */
+  assetBaseUrl?: string;
+  /** Base URL that model URLs in the manifest resolve against. Defaults to the manifest's directory. */
   baseUrl?: string;
-  manifestUrl: string;
+  /** URL of a custom model manifest. Defaults to the manifest built into the package. */
+  manifestUrl?: string;
   tfjsWasmBaseUrl?: string;
   overrides?: ModelOverrides;
 }

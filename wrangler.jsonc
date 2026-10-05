@@ -3,7 +3,7 @@
   "name": "open-face-liveness",
   "compatibility_date": "2026-06-11",
   "assets": {
-    "directory": "./dist",
+    "directory": "./demo-dist",
     "not_found_handling": "single-page-application"
   }
 }

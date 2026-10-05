@@ -38,10 +38,21 @@ override dependency resolution.
 ## Runtime Assets
 
 - Model assets: `models/`
-- TensorFlow.js wasm binaries: `vendor/tfjs-wasm/`, loaded from `/open-face-liveness/vendor/tfjs-wasm/` unless `models.tfjsWasmBaseUrl` is set.
-  They are served from the app's own origin, so verification makes no third-party requests.
+- TensorFlow.js wasm binaries: `vendor/tfjs-wasm/`.
   `bun run vendor:tfjs-wasm` copies them from `@tensorflow/tfjs-backend-wasm`, and `bun run package:audit` fails if they drift.
-- Custom model and runtime URLs can be provided through configuration.
+
+`src/models/bundled-assets.generated.ts` embeds `models/manifest.json` and refers to every asset with `new URL('<literal path>', import.meta.url)`.
+Bundlers that support that pattern emit each file with the app's build, which is the default loading path.
+The files keep their `models/` layout in the manifest, and the loader sends each request to the URL the bundler gave that file.
+Run `bun run assets:generate` after changing `models/`, and `bun run package:audit` fails if the generated file is stale.
+
+Assets load from the first of these that is set:
+
+1. `models.manifestUrl`, `models.baseUrl`, `models.tfjsWasmBaseUrl`, and per-model `models.overrides`.
+2. `models.assetBaseUrl`, a copy of the package's `models/` and `vendor/` directories made by `npx open-face-liveness init <directory>`, or a CDN mirror of the package.
+3. The files emitted by the app's bundler.
+
+Only a custom `models.manifestUrl` causes a manifest request; otherwise the built-in manifest and its hashes are used.
 
 ## TensorFlow.js Backend
 

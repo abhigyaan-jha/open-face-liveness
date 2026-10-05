@@ -12,7 +12,6 @@ import type {
   SpoofAdapter,
   SpoofRawResult,
 } from '../models.js';
-import { DEFAULT_TFJS_WASM_BASE_URL } from '../config.js';
 import { VerificationError } from '../errors.js';
 
 const DETECTOR_NUM_COORDS = 16;
@@ -25,18 +24,23 @@ type NumericTensor = {
 };
 
 interface TfjsAdapterOptions {
-  wasmBaseUrl?: string;
+  /** Base URL of the TensorFlow.js wasm files, or a map from file name to URL. */
+  wasmPaths: string | Record<string, string>;
 }
 
 let wasmBackendReady: Promise<void> | null = null;
 
-// TensorFlow.js has one global engine, so the first wasm base URL wins for the page.
-const ensureWasmBackend = (wasmBaseUrl = DEFAULT_TFJS_WASM_BASE_URL): Promise<void> => {
+// Shown when a bundled file fails to load, which usually means the app's bundler did not emit it.
+const BUNDLED_ASSET_HINT = ' If your bundler does not emit `new URL(..., import.meta.url)` assets, '
+  + 'copy them with `npx open-face-liveness init <public dir>` and set models.assetBaseUrl.';
+
+// TensorFlow.js has one global engine, so the first wasm paths win for the page.
+const ensureWasmBackend = (wasmPaths: TfjsAdapterOptions['wasmPaths']): Promise<void> => {
   wasmBackendReady ??= (async () => {
     // Wasm paths only apply before the backend initializes, e.g. by the host app.
     // tf.findBackend() would start initialization itself, so read the registry instead.
     if (!tf.engine().registry.wasm) {
-      setWasmPaths(wasmBaseUrl);
+      setWasmPaths(wasmPaths);
       // Threads need blob-URL workers, which strict Content Security Policies block.
       setThreadsCount(1);
     }
@@ -47,7 +51,9 @@ const ensureWasmBackend = (wasmBaseUrl = DEFAULT_TFJS_WASM_BASE_URL): Promise<vo
     await tf.ready();
   })().catch((error: unknown) => {
     wasmBackendReady = null;
-    throw new VerificationError('models.load_failed', 'Unable to initialize the TensorFlow.js wasm backend.', {
+    // A file map means the wasm comes from the app's bundle rather than a URL the app chose.
+    const hint = typeof wasmPaths === 'string' ? '' : BUNDLED_ASSET_HINT;
+    throw new VerificationError('models.load_failed', `Unable to initialize the TensorFlow.js wasm backend.${hint}`, {
       area: 'models',
       cause: error,
     });
@@ -126,27 +132,32 @@ const getRequestUrl = (input: RequestInfo | URL): string =>
   typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 
 // Fetches only the files the manifest lists, and only if their bytes match its SHA-256 pins.
+// TensorFlow.js requests weight files by name relative to model.json, so requests are matched
+// in that layout and then sent to `fileUrls`, where bundlers may have renamed the files.
 const createVerifiedFetch = (model: ResolvedModelSpec, modelUrl: URL) => {
   const expected = new Map(
-    Object.entries(model.files).map(([path, hash]) => [new URL(path, modelUrl).href, hash]),
+    Object.entries(model.files).map(([path, hash]) => [
+      new URL(path, modelUrl).href,
+      { hash, url: model.fileUrls?.[path] ?? new URL(path, modelUrl).href },
+    ]),
   );
   const verified = new Set<string>();
 
   const fetchFunc = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(getRequestUrl(input), document.baseURI).href;
-    const hash = expected.get(url);
-    if (!hash) {
+    const file = expected.get(url);
+    if (!file) {
       throw new ModelIntegrityError(`Model file is not listed in the manifest: ${url}`);
     }
 
-    const response = await fetch(input, init);
+    const response = await fetch(file.url, init);
     if (!response.ok) {
-      throw new Error(`Model request failed: ${response.status} ${url}`);
+      throw new Error(`Model request failed: ${response.status} ${file.url}`);
     }
 
     const bytes = await response.arrayBuffer();
-    if (toHex(await crypto.subtle.digest('SHA-256', bytes)) !== hash) {
-      throw new ModelIntegrityError(`Model file SHA-256 does not match the manifest: ${url}`);
+    if (toHex(await crypto.subtle.digest('SHA-256', bytes)) !== file.hash) {
+      throw new ModelIntegrityError(`Model file SHA-256 does not match the manifest: ${file.url}`);
     }
 
     verified.add(url);
@@ -156,8 +167,8 @@ const createVerifiedFetch = (model: ResolvedModelSpec, modelUrl: URL) => {
   return { allFilesVerified: () => verified.size === expected.size, fetchFunc };
 };
 
-const loadModel = async (model: ResolvedModelSpec, options: TfjsAdapterOptions = {}): Promise<GraphModel> => {
-  await ensureWasmBackend(options.wasmBaseUrl);
+const loadModel = async (model: ResolvedModelSpec, options: TfjsAdapterOptions): Promise<GraphModel> => {
+  await ensureWasmBackend(options.wasmPaths);
   const modelUrl = new URL(model.url, document.baseURI);
   const { allFilesVerified, fetchFunc } = createVerifiedFetch(model, modelUrl);
 
@@ -168,7 +179,9 @@ const loadModel = async (model: ResolvedModelSpec, options: TfjsAdapterOptions =
     const integrityFailed = error instanceof ModelIntegrityError;
     throw new VerificationError(
       integrityFailed ? 'models.integrity_failed' : 'models.load_failed',
-      integrityFailed ? error.message : `Unable to load TensorFlow.js model: ${model.url}`,
+      integrityFailed
+        ? error.message
+        : `Unable to load TensorFlow.js model: ${model.url}.${model.fileUrls ? BUNDLED_ASSET_HINT : ''}`,
       { area: 'models', cause: error },
     );
   }
@@ -218,7 +231,7 @@ const runModel = async (
 
 export const createTfjsDetectorAdapter = async (
   model: ResolvedModelSpec,
-  options: TfjsAdapterOptions = {},
+  options: TfjsAdapterOptions,
 ): Promise<DetectorAdapter> => {
   const graph = await loadModel(model, options);
   const { inputName, outputNames } = validateModel(graph, () => {
@@ -283,7 +296,7 @@ const getMeshIo = (graph: GraphModel) => {
 
 export const createTfjsMeshAdapter = async (
   model: ResolvedModelSpec,
-  options: TfjsAdapterOptions = {},
+  options: TfjsAdapterOptions,
 ): Promise<MeshAdapter> => {
   const graph = await loadModel(model, options);
   const io = validateModel(graph, () => getMeshIo(graph));
@@ -344,7 +357,7 @@ const getBlendshapeIo = (graph: GraphModel) => {
 
 export const createTfjsBlendshapeAdapter = async (
   model: ResolvedModelSpec,
-  options: TfjsAdapterOptions = {},
+  options: TfjsAdapterOptions,
 ): Promise<BlendshapeAdapter> => {
   const graph = await loadModel(model, options);
   const io = validateModel(graph, () => getBlendshapeIo(graph));
@@ -382,7 +395,7 @@ export const createTfjsBlendshapeAdapter = async (
 
 export const createTfjsSpoofAdapter = async (
   model: ResolvedModelSpec,
-  options: TfjsAdapterOptions = {},
+  options: TfjsAdapterOptions,
 ): Promise<SpoofAdapter> => {
   const graph = await loadModel(model, options);
   const { inputName, outputName, outputNames } = validateModel(graph, () => {

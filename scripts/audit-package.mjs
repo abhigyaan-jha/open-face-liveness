@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { OUTPUT_PATH, TFJS_WASM_FILES, generateBundledAssets } from './generate-bundled-assets.mjs';
 
 const root = process.cwd();
 const toPosix = (value) => value.split(path.sep).join('/');
@@ -105,10 +106,20 @@ for (const model of manifest.models) {
 }
 
 const wasmSourceDirectory = 'node_modules/@tensorflow/tfjs-backend-wasm/dist';
-for (const file of ['tfjs-backend-wasm.wasm', 'tfjs-backend-wasm-simd.wasm', 'tfjs-backend-wasm-threaded-simd.wasm']) {
+for (const file of TFJS_WASM_FILES) {
   const vendored = path.posix.join('vendor/tfjs-wasm', file);
   if (!fs.existsSync(path.join(root, vendored)) || sha256(vendored) !== sha256(path.posix.join(wasmSourceDirectory, file))) {
     errors.push(`${vendored} does not match @tensorflow/tfjs-backend-wasm@${tfjsVersion}. Run bun run vendor:tfjs-wasm.`);
+  }
+}
+
+if (fs.readFileSync(path.join(root, OUTPUT_PATH), 'utf8') !== generateBundledAssets(root)) {
+  errors.push(`${OUTPUT_PATH} is out of date with models/manifest.json. Run bun run assets:generate.`);
+}
+
+for (const [name, binPath] of Object.entries(packageJson.bin ?? {})) {
+  if (!fs.existsSync(path.join(root, binPath)) || !publishedFileEntries.has(path.posix.normalize(binPath).split('/')[0])) {
+    errors.push(`package.json bin '${name}' points at ${binPath}, which is missing or not in files.`);
   }
 }
 

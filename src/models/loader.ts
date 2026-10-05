@@ -11,7 +11,8 @@ import { createMeshPipeline } from '../face/mesh.js';
 import { createSpoofPipeline } from '../spoof/pipeline.js';
 import { VerificationError } from '../errors.js';
 import type { LoadModelRuntimeOptions, ModelRuntimeBundle, SpoofAdapter } from '../models.js';
-import { loadModelManifest, requireModelCapability, resolveModelSpecs } from './manifest.js';
+import { resolveModelAssets } from './assets.js';
+import { requireModelCapability } from './manifest.js';
 
 const createRequiredSpoofUnavailableError = (
   message = 'Required spoof check could not be initialized.',
@@ -35,20 +36,16 @@ const disposeCreatedAdapters = async (
 export const loadModelRuntime = async (
   options: LoadModelRuntimeOptions,
 ): Promise<ModelRuntimeBundle> => {
-  const manifest = await loadModelManifest(options.models.manifestUrl);
-  const resolvedModels = resolveModelSpecs(manifest, options.models.overrides, {
-    baseUrl: options.models.baseUrl,
-    manifestUrl: options.models.manifestUrl,
-  });
+  const { manifest, models: resolvedModels, tfjsWasmPaths } = await resolveModelAssets(options.models);
 
   const detectorModel = requireModelCapability(resolvedModels, 'detector');
   const meshModel = requireModelCapability(resolvedModels, 'mesh');
   const blendshapeModel = requireModelCapability(resolvedModels, 'blendshape');
 
   const [detectorAdapterResult, meshAdapterResult, blendshapeAdapterResult] = await Promise.allSettled([
-    createTfjsDetectorAdapter(detectorModel, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
-    createTfjsMeshAdapter(meshModel, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
-    createTfjsBlendshapeAdapter(blendshapeModel, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
+    createTfjsDetectorAdapter(detectorModel, { wasmPaths: tfjsWasmPaths }),
+    createTfjsMeshAdapter(meshModel, { wasmPaths: tfjsWasmPaths }),
+    createTfjsBlendshapeAdapter(blendshapeModel, { wasmPaths: tfjsWasmPaths }),
   ]);
 
   if (detectorAdapterResult.status === 'rejected') {
@@ -97,7 +94,7 @@ export const loadModelRuntime = async (
 
       const spoofResults = await Promise.allSettled(
         spoofModels.map(async (model) => ({
-          adapter: await createTfjsSpoofAdapter(model, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
+          adapter: await createTfjsSpoofAdapter(model, { wasmPaths: tfjsWasmPaths }),
           model,
         })),
       );

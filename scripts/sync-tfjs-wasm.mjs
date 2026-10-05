@@ -3,12 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-
-const TFJS_WASM_FILES = [
-  'tfjs-backend-wasm.wasm',
-  'tfjs-backend-wasm-simd.wasm',
-  'tfjs-backend-wasm-threaded-simd.wasm',
-];
+import { TFJS_WASM_FILES } from './generate-bundled-assets.mjs';
 
 const root = process.cwd();
 const sourceDirectory = path.join(root, 'node_modules/@tensorflow/tfjs-backend-wasm/dist');
