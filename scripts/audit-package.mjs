@@ -31,8 +31,8 @@ const walk = (relativeDirectory) => {
 const packageJson = readJson('package.json');
 const errors = [];
 
-if (packageJson.private !== true) {
-  errors.push('package.json must stay private until the release surface is finalized.');
+if (packageJson.private) {
+  errors.push('package.json must not be private, or npm refuses to publish it.');
 }
 
 const forbiddenFileEntries = new Set(['src', 'demo', 'test', 'node_modules']);
