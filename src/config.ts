@@ -6,6 +6,7 @@ export const DEFAULT_ASSET_BASE_URL = '/open-face-liveness/';
 export const DEFAULT_MODEL_BASE_URL = `${DEFAULT_ASSET_BASE_URL}models/`;
 export const DEFAULT_MODEL_MANIFEST_URL = `${DEFAULT_MODEL_BASE_URL}manifest.json`;
 export const DEFAULT_OPENCV_ASSET_BASE_URL = `${DEFAULT_ASSET_BASE_URL}vendor/opencv/`;
+export const DEFAULT_TFJS_WASM_BASE_URL = `${DEFAULT_ASSET_BASE_URL}vendor/tfjs-wasm/`;
 
 export type VerificationCheck = 'face' | 'light' | 'liveness' | 'spoof';
 export type RuntimeVerificationCheck = 'face' | 'light' | 'liveness' | 'spoof';

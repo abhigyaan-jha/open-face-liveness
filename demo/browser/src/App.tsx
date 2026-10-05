@@ -46,6 +46,7 @@ const verifier = createOpenFaceLivenessClient({
   models: {
     baseUrl: DEMO_ASSET_CONFIG.modelBaseUrl,
     manifestUrl: DEMO_ASSET_CONFIG.modelManifestUrl,
+    tfjsWasmBaseUrl: DEMO_ASSET_CONFIG.tfjsWasmBaseUrl,
   },
 });
 
@@ -778,6 +779,7 @@ export const App = function App() {
         models: {
           baseUrl: DEMO_ASSET_CONFIG.modelBaseUrl,
           manifestUrl: DEMO_ASSET_CONFIG.modelManifestUrl,
+          tfjsWasmBaseUrl: DEMO_ASSET_CONFIG.tfjsWasmBaseUrl,
         },
         onSnapshot: handleSnapshot,
         video: videoRef.current,

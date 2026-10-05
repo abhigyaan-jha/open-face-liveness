@@ -9,7 +9,7 @@
 anti-spoofing, and light-response signals.
 
 It runs verification signals locally from an `HTMLVideoElement` using
-browser-loadable ONNX models, giving web apps fast face/liveness checks without
+browser-loadable TensorFlow.js models, giving web apps fast face/liveness checks without
 streaming every video frame to a server.
 
 Use it before ID uploads, sensitive account actions, backend risk checks, or
@@ -19,7 +19,7 @@ manual review. It is not a standalone KYC or regulated identity-proofing system.
 
 ## Highlights
 
-- Browser ONNX stack: MediaPipe BlazeFace short-range detector, 478-landmark
+- Browser TensorFlow.js stack: MediaPipe BlazeFace short-range detector, 478-landmark
   Face Mesh, Blendshape V2 expressions, and MiniFASNet V1SE/V2 spoof classifiers
 - Face geometry: OneEuro smoothing, weighted Procrustes alignment,
   yaw/pitch/roll pose, fit boxes, and stable anchors
@@ -94,6 +94,9 @@ const result = await verifier.start({
 
 The application provides the video element. `open-face-liveness` loads browser models,
 runs the enabled checks, and returns a typed `VerificationResult`.
+
+Serve the package's `models/` and `vendor/` directories from `/open-face-liveness/` on your own origin, or pass custom URLs in the options.
+Verification makes no third-party network requests.
 
 ## Results
 

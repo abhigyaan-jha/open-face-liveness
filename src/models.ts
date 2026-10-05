@@ -9,7 +9,12 @@ export type ModelOverrides = Partial<Record<ModelCapability, string>> & {
 
 export interface ModelSpec {
   capability: ModelCapability;
-  format: 'onnx';
+  /**
+   * SHA-256 hex digest of every file the model loads, keyed by path relative to `url`.
+   * Loading fails if a file is missing from this list or its bytes do not match.
+   */
+  files: Record<string, string>;
+  format: 'tfjs';
   id: string;
   required: boolean;
   url: string;
@@ -29,7 +34,7 @@ export interface ResolvedModelSpec extends ModelSpec {
 export interface VerificationModelsOptions {
   baseUrl?: string;
   manifestUrl: string;
-  onnxWasmBaseUrl?: string;
+  tfjsWasmBaseUrl?: string;
   overrides?: ModelOverrides;
 }
 

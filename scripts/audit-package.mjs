@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -78,17 +79,37 @@ if (absoluteModelUrls.length) {
   ].join('\n'));
 }
 
-const onnxDependency = packageJson.dependencies?.['onnxruntime-web'];
-const onnxVersion = typeof onnxDependency === 'string' && /^\d+\.\d+\.\d+$/.test(onnxDependency)
-  ? onnxDependency
-  : null;
-const onnxAdapterSource = fs.readFileSync(path.join(root, 'src/onnx/adapters.ts'), 'utf8');
-if (!onnxVersion) {
-  errors.push('onnxruntime-web must be pinned to an exact version because its JS and wasm assets are a matched set.');
+const tfjsPackages = ['@tensorflow/tfjs-core', '@tensorflow/tfjs-converter', '@tensorflow/tfjs-backend-wasm'];
+const tfjsVersions = new Set(tfjsPackages.map((name) => packageJson.dependencies?.[name]));
+const [tfjsVersion] = tfjsVersions;
+if (tfjsVersions.size !== 1 || typeof tfjsVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(tfjsVersion)) {
+  errors.push(`${tfjsPackages.join(', ')} must be pinned to the same exact version because their JS and wasm assets are a matched set.`);
 }
 
-if (!onnxVersion || !onnxAdapterSource.includes(`onnxruntime-web@${onnxVersion}/dist/`)) {
-  errors.push('DEFAULT_ONNX_WASM_BASE_URL must stay pinned to the onnxruntime-web dependency version.');
+const sha256 = (relativePath) => createHash('sha256').update(fs.readFileSync(path.join(root, relativePath))).digest('hex');
+
+for (const model of manifest.models) {
+  const modelDirectory = path.posix.dirname(model.url);
+  const listedFiles = Object.keys(model.files ?? {}).sort();
+  const actualFiles = walk(path.join('models', modelDirectory)).map((file) => path.posix.basename(file)).sort();
+  if (listedFiles.join() !== actualFiles.join()) {
+    errors.push(`models/manifest.json lists [${listedFiles.join(', ')}] for ${model.id}, but models/${modelDirectory}/ contains [${actualFiles.join(', ')}].`);
+    continue;
+  }
+
+  for (const [file, hash] of Object.entries(model.files)) {
+    if (sha256(path.posix.join('models', modelDirectory, file)) !== hash) {
+      errors.push(`models/${modelDirectory}/${file} does not match its SHA-256 in models/manifest.json.`);
+    }
+  }
+}
+
+const wasmSourceDirectory = 'node_modules/@tensorflow/tfjs-backend-wasm/dist';
+for (const file of ['tfjs-backend-wasm.wasm', 'tfjs-backend-wasm-simd.wasm', 'tfjs-backend-wasm-threaded-simd.wasm']) {
+  const vendored = path.posix.join('vendor/tfjs-wasm', file);
+  if (!fs.existsSync(path.join(root, vendored)) || sha256(vendored) !== sha256(path.posix.join(wasmSourceDirectory, file))) {
+    errors.push(`${vendored} does not match @tensorflow/tfjs-backend-wasm@${tfjsVersion}. Run bun run vendor:tfjs-wasm.`);
+  }
 }
 
 if (errors.length) {

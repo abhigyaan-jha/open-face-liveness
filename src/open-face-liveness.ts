@@ -130,7 +130,7 @@ const createRuntimeKey = (models: VerificationModelsOptions): string =>
   JSON.stringify({
     baseUrl: models.baseUrl,
     manifestUrl: models.manifestUrl,
-    onnxWasmBaseUrl: models.onnxWasmBaseUrl,
+    tfjsWasmBaseUrl: models.tfjsWasmBaseUrl,
     overrides: normalizeOverrides(models.overrides),
   });
 
@@ -164,7 +164,7 @@ export class OpenFaceLiveness {
     const models: VerificationModelsOptions = {
       baseUrl: options.models?.baseUrl ?? this.config.models.baseUrl,
       manifestUrl: options.models?.manifestUrl ?? this.config.models.manifestUrl,
-      onnxWasmBaseUrl: options.models?.onnxWasmBaseUrl ?? this.config.models.onnxWasmBaseUrl,
+      tfjsWasmBaseUrl: options.models?.tfjsWasmBaseUrl ?? this.config.models.tfjsWasmBaseUrl,
     };
 
     if (Object.keys(overrides).length > 0) {
@@ -383,7 +383,7 @@ export class OpenFaceLiveness {
       models: {
         baseUrl: this.config.models.baseUrl,
         manifestUrl: this.config.models.manifestUrl,
-        onnxWasmBaseUrl: this.config.models.onnxWasmBaseUrl,
+        tfjsWasmBaseUrl: this.config.models.tfjsWasmBaseUrl,
         overrides: this.config.models.overrides,
       },
       video,

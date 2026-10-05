@@ -15,8 +15,8 @@ blendshapes -> expression math
 
 ## Google References
 
-We do not ship MediaPipe runtime. We port the small parts needed for this ONNX
-runtime:
+We do not ship MediaPipe runtime. We port the small parts needed for this
+TensorFlow.js runtime:
 
 - [FaceGeometryFromLandmarksGraph](https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/tasks/cc/vision/face_geometry/face_geometry_from_landmarks_graph.cc#L738-L769): uses the first 468 landmarks and a top-left camera environment.
 - [GeometryPipeline](https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/modules/face_geometry/libs/geometry_pipeline.cc#L1867-L1926): loads canonical mesh positions plus Procrustes landmark weights from metadata.
@@ -29,7 +29,7 @@ runtime:
 Code: [`mesh.ts`](./mesh.ts)
 
 The detector finds a coarse face box. We expand it into a square crop and run
-the 256x256 face landmark ONNX model. The raw model coordinates are then
+the 256x256 face landmark model. The raw model coordinates are then
 projected back into the video frame.
 
 ```ts

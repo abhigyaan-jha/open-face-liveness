@@ -68,16 +68,17 @@
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"
     },
-    "./onnx": {
-      "types": "./dist/onnx/index.d.ts",
-      "import": "./dist/onnx/index.js"
-    },
     "./spoof": {
       "types": "./dist/spoof/index.d.ts",
       "import": "./dist/spoof/index.js"
     },
+    "./tfjs": {
+      "types": "./dist/tfjs/index.d.ts",
+      "import": "./dist/tfjs/index.js"
+    },
     "./models/*": "./models/*",
     "./vendor/opencv/*": "./vendor/opencv/*",
+    "./vendor/tfjs-wasm/*": "./vendor/tfjs-wasm/*",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -88,10 +89,13 @@
     "package:audit": "node scripts/audit-package.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run typecheck && npm run lint && npm run build && npm run package:audit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vendor:tfjs-wasm": "node scripts/sync-tfjs-wasm.mjs"
   },
   "dependencies": {
-    "onnxruntime-web": "1.26.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@tensorflow/tfjs-converter": "4.22.0",
+    "@tensorflow/tfjs-core": "4.22.0",
     "xstate": "^5.31.1"
   },
   "devDependencies": {
@@ -114,7 +118,7 @@
     "face-verification",
     "liveness",
     "anti-spoofing",
-    "onnx",
+    "tensorflowjs",
     "opencv",
     "browser"
   ]

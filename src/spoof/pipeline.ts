@@ -14,7 +14,16 @@ const DEFAULT_SPOOF_SCALE = 2.7;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
-const getFilename = (source: string): string => source.split('/').pop()?.split('\\').pop() || source;
+// TensorFlow.js graph models live in <stem>/model.json, so the stem is the directory name.
+const getModelStem = (source: string): string => {
+  const segments = source.split(/[?#]/, 1)[0].split(/[\\/]/).filter(Boolean);
+  const filename = segments[segments.length - 1] ?? source;
+  if (filename === 'model.json' && segments.length > 1) {
+    return segments[segments.length - 2];
+  }
+
+  return filename.replace(/\.(pth|pt|ckpt)$/i, '');
+};
 
 export const parseSpoofModelScale = (source: string | ResolvedModelSpec): number | null => {
   const candidates =
@@ -23,7 +32,7 @@ export const parseSpoofModelScale = (source: string | ResolvedModelSpec): number
       : [source.url, source.id].filter((candidate): candidate is string => Boolean(candidate));
 
   for (const candidate of candidates) {
-    const base = getFilename(candidate).replace(/\.(onnx|pth|pt|ckpt)$/i, '');
+    const base = getModelStem(candidate);
     const parts = base.split('_');
 
     if (parts[0] === 'org') {

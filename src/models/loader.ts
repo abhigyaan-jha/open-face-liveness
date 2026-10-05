@@ -1,11 +1,11 @@
 import type { ResolvedModelSpec } from '../models.js';
 import {
   attachIoMetadata,
-  createOnnxBlendshapeAdapter,
-  createOnnxDetectorAdapter,
-  createOnnxMeshAdapter,
-  createOnnxSpoofAdapter,
-} from '../onnx/adapters.js';
+  createTfjsBlendshapeAdapter,
+  createTfjsDetectorAdapter,
+  createTfjsMeshAdapter,
+  createTfjsSpoofAdapter,
+} from '../tfjs/adapters.js';
 import { createDetectorPipeline } from '../face/detector.js';
 import { createMeshPipeline } from '../face/mesh.js';
 import { createSpoofPipeline } from '../spoof/pipeline.js';
@@ -46,9 +46,9 @@ export const loadModelRuntime = async (
   const blendshapeModel = requireModelCapability(resolvedModels, 'blendshape');
 
   const [detectorAdapterResult, meshAdapterResult, blendshapeAdapterResult] = await Promise.allSettled([
-    createOnnxDetectorAdapter(detectorModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
-    createOnnxMeshAdapter(meshModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
-    createOnnxBlendshapeAdapter(blendshapeModel, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
+    createTfjsDetectorAdapter(detectorModel, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
+    createTfjsMeshAdapter(meshModel, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
+    createTfjsBlendshapeAdapter(blendshapeModel, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
   ]);
 
   if (detectorAdapterResult.status === 'rejected') {
@@ -97,7 +97,7 @@ export const loadModelRuntime = async (
 
       const spoofResults = await Promise.allSettled(
         spoofModels.map(async (model) => ({
-          adapter: await createOnnxSpoofAdapter(model, { wasmBaseUrl: options.models.onnxWasmBaseUrl }),
+          adapter: await createTfjsSpoofAdapter(model, { wasmBaseUrl: options.models.tfjsWasmBaseUrl }),
           model,
         })),
       );

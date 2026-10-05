@@ -7,11 +7,13 @@
 
 | Package | Declared version | Locked version | Update behavior | Purpose |
 | --- | --- | --- | --- | --- |
-| `onnxruntime-web` | `1.26.0` | `1.26.0` | Exact package spec | Runs browser ONNX sessions for detector, mesh, blendshape, and spoof models |
+| `@tensorflow/tfjs-core` | `4.22.0` | `4.22.0` | Exact package spec | TensorFlow.js tensors and engine |
+| `@tensorflow/tfjs-converter` | `4.22.0` | `4.22.0` | Exact package spec | Loads and runs the detector, mesh, blendshape, and spoof graph models |
+| `@tensorflow/tfjs-backend-wasm` | `4.22.0` | `4.22.0` | Exact package spec | Wasm backend that executes the models |
 | `xstate` | `^5.31.1` | `5.31.1` | Caret range, pinned by `bun.lock` in this repo | Drives the verification session finite-state machine |
 
 There is no root `peerDependencies` field today. Consumers should not need to
-install `onnxruntime-web` or `xstate` separately unless they intentionally
+install the TensorFlow.js packages or `xstate` separately unless they intentionally
 override dependency resolution.
 
 ## Development Dependencies
@@ -37,4 +39,24 @@ override dependency resolution.
 
 - Model assets: `models/`
 - OpenCV worker assets: `vendor/opencv/`
+- TensorFlow.js wasm binaries: `vendor/tfjs-wasm/`, loaded from `/open-face-liveness/vendor/tfjs-wasm/` unless `models.tfjsWasmBaseUrl` is set.
+  They are served from the app's own origin, so verification makes no third-party requests.
+  `bun run vendor:tfjs-wasm` copies them from `@tensorflow/tfjs-backend-wasm`, and `bun run package:audit` fails if they drift.
 - Custom model and runtime URLs can be provided through configuration.
+
+## TensorFlow.js Backend
+
+TensorFlow.js has one global engine per page.
+`open-face-liveness` registers the wasm backend and makes it the active backend when models load.
+If the host app also uses TensorFlow.js with another backend, such as WebGL, that app's work will run on wasm after verification starts.
+If the host app initializes the wasm backend first, its wasm paths are kept and `models.tfjsWasmBaseUrl` is ignored.
+The backend runs single-threaded, because threads need blob-URL workers that strict Content Security Policies block.
+
+The TensorFlow.js packages are pinned to one exact version because the JS and wasm binaries are a matched set.
+`bun run package:audit` enforces that pin.
+
+## Model Integrity
+
+Every manifest entry lists the SHA-256 of each file the model loads.
+The loader fetches only listed files and rejects any whose bytes do not match, with the `models.integrity_failed` error code.
+Hashing uses Web Crypto, which browsers only provide in secure contexts (HTTPS or localhost), the same requirement as camera access.
