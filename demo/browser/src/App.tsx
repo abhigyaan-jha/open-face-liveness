@@ -770,7 +770,6 @@ export const App = function App() {
         } satisfies CheckConfig,
         debug: debugEnabled,
         light: {
-          opencvAssetBaseUrl: DEMO_ASSET_CONFIG.opencvAssetBaseUrl,
           sequence: createLightSequence({ length: 4 }),
         },
         liveness: {

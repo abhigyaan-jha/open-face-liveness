@@ -11,8 +11,5 @@ project source covered by the root `LICENSE`.
 | `models/2.7_80x80_MiniFASNetV2/` | https://github.com/minivision-ai/Silent-Face-Anti-Spoofing | Apache-2.0 |
 | `models/4_0_0_80x80_MiniFASNetV1SE/` | https://github.com/minivision-ai/Silent-Face-Anti-Spoofing | Apache-2.0 |
 | `vendor/tfjs-wasm/` | https://github.com/tensorflow/tfjs/tree/tfjs-v4.22.0/tfjs-backend-wasm | Apache-2.0 |
-| `vendor/opencv/opencv.js` | https://github.com/opencv/opencv/tree/4.4.0 | BSD-3-Clause |
-| `vendor/opencv/opencv_js.wasm` | https://github.com/opencv/opencv/tree/4.4.0 | BSD-3-Clause |
 
-License texts are included in `licenses/APACHE-2.0.txt` and
-`licenses/BSD-3-Clause-OpenCV-4.4.0.txt`.
+The license text is included in `licenses/APACHE-2.0.txt`.

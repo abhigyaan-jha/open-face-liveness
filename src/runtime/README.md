@@ -38,7 +38,6 @@ override dependency resolution.
 ## Runtime Assets
 
 - Model assets: `models/`
-- OpenCV worker assets: `vendor/opencv/`
 - TensorFlow.js wasm binaries: `vendor/tfjs-wasm/`, loaded from `/open-face-liveness/vendor/tfjs-wasm/` unless `models.tfjsWasmBaseUrl` is set.
   They are served from the app's own origin, so verification makes no third-party requests.
   `bun run vendor:tfjs-wasm` copies them from `@tensorflow/tfjs-backend-wasm`, and `bun run package:audit` fails if they drift.

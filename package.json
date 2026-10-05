@@ -77,7 +77,6 @@
       "import": "./dist/tfjs/index.js"
     },
     "./models/*": "./models/*",
-    "./vendor/opencv/*": "./vendor/opencv/*",
     "./vendor/tfjs-wasm/*": "./vendor/tfjs-wasm/*",
     "./package.json": "./package.json"
   },
@@ -119,7 +118,6 @@
     "liveness",
     "anti-spoofing",
     "tensorflowjs",
-    "opencv",
     "browser"
   ]
 }
