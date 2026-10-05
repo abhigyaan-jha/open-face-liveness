@@ -14,6 +14,7 @@ const tsFiles = [
 ];
 
 const jsFiles = [
+  'bin/**/*.mjs',
   'scripts/**/*.mjs',
   'eslint.config.js',
 ];
@@ -22,6 +23,7 @@ export default tseslint.config(
   {
     ignores: [
       'coverage/**',
+      'demo-dist/**',
       'dist/**',
       'licenses/**',
       'models/**',

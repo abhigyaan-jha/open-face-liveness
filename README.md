@@ -86,17 +86,36 @@ const result = await verifier.start({
     light: true,
     spoof: true,
   },
-  models: {
-    manifestUrl: '/open-face-liveness/models/manifest.json',
-  },
 });
 ```
 
 The application provides the video element. `open-face-liveness` loads browser models,
 runs the enabled checks, and returns a typed `VerificationResult`.
 
-Serve the package's `models/` and `vendor/` directories from `/open-face-liveness/` on your own origin, or pass custom URLs in the options.
+### Models and wasm files
+
+With Vite, webpack 5, Rspack, Parcel, or Next.js there is nothing to configure.
+The package refers to its models and TensorFlow.js wasm files with `new URL(..., import.meta.url)`, so your bundler copies them into your build with content-hashed names.
+They are served from your own origin and downloaded only when a verification starts, and the spoof models only when the spoof check is enabled.
 Verification makes no third-party network requests.
+
+Without one of those bundlers, for example with esbuild or a plain `<script type="module">`, copy the files into a directory your app serves and point the client at it:
+
+```sh
+npx open-face-liveness init public/open-face-liveness
+```
+
+```ts
+const verifier = createOpenFaceLivenessClient({
+  models: { assetBaseUrl: '/open-face-liveness/' },
+});
+```
+
+Add the same `init` command to your `postinstall` script so the copy stays in sync when you upgrade.
+A stale copy fails to load with the `models.integrity_failed` error code rather than running mismatched models.
+
+`assetBaseUrl` can also point at a CDN mirror of the published package, such as `https://cdn.jsdelivr.net/npm/open-face-liveness@<version>/`.
+Every file is still checked against the SHA-256 hashes built into the package.
 
 ## Results
 

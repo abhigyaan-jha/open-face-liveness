@@ -74,6 +74,7 @@ See: [`src/light`](../src/light)
 ## Custom Models
 
 Applications can provide their own manifest URL and model overrides.
+Without them, the loader uses the manifest built into the package from [`manifest.json`](./manifest.json); run `bun run assets:generate` after changing it.
 Custom models must be TensorFlow.js graph models (`"format": "tfjs"`) that match the input
 and output names and shapes expected by the corresponding adapter in
 [`../src/tfjs/adapters.ts`](../src/tfjs/adapters.ts).
@@ -94,6 +95,6 @@ To use different models, provide your own manifest with their hashes.
 ## Notes
 
 - Spoof crop scale is parsed from the model directory name, for example `2.7_80x80_MiniFASNetV2/model.json` uses scale `2.7`.
-- Relative model URLs resolve from `models.baseUrl` or from the manifest URL directory.
+- Relative model URLs resolve from `models.baseUrl`, the manifest URL directory, or `models.assetBaseUrl` + `models/`.
 - If `spoof` is enabled and no spoof model can be loaded, the session fails with a canonical `VerificationError`.
 - Model attribution and license details are listed in [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).

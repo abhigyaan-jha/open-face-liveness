@@ -22,7 +22,11 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "open-face-liveness": "./bin/open-face-liveness.mjs"
+  },
   "files": [
+    "bin",
     "dist",
     "models",
     "vendor",
@@ -81,10 +85,12 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "assets:generate": "node scripts/generate-bundled-assets.mjs",
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "demo": "vite --host 127.0.0.1",
-    "lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"demo/browser/src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" vite.config.ts eslint.config.js",
+    "demo:build": "vite build",
+    "lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"demo/browser/src/**/*.{ts,tsx}\" \"bin/**/*.mjs\" \"scripts/**/*.mjs\" vite.config.ts eslint.config.js",
     "package:audit": "node scripts/audit-package.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "npm run typecheck && npm run lint && npm run build && npm run package:audit",

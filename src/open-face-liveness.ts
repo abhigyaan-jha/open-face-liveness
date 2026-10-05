@@ -128,6 +128,7 @@ const normalizeOverrides = (
 
 const createRuntimeKey = (models: VerificationModelsOptions): string =>
   JSON.stringify({
+    assetBaseUrl: models.assetBaseUrl,
     baseUrl: models.baseUrl,
     manifestUrl: models.manifestUrl,
     tfjsWasmBaseUrl: models.tfjsWasmBaseUrl,
@@ -162,6 +163,7 @@ export class OpenFaceLiveness {
       ...(options.models?.overrides ?? {}),
     };
     const models: VerificationModelsOptions = {
+      assetBaseUrl: options.models?.assetBaseUrl ?? this.config.models.assetBaseUrl,
       baseUrl: options.models?.baseUrl ?? this.config.models.baseUrl,
       manifestUrl: options.models?.manifestUrl ?? this.config.models.manifestUrl,
       tfjsWasmBaseUrl: options.models?.tfjsWasmBaseUrl ?? this.config.models.tfjsWasmBaseUrl,
@@ -381,6 +383,7 @@ export class OpenFaceLiveness {
       checks: this.getEnabledChecks(),
       runtime,
       models: {
+        assetBaseUrl: this.config.models.assetBaseUrl,
         baseUrl: this.config.models.baseUrl,
         manifestUrl: this.config.models.manifestUrl,
         tfjsWasmBaseUrl: this.config.models.tfjsWasmBaseUrl,
